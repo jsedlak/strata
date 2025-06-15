@@ -1,0 +1,47 @@
+name: Publish Packages
+
+on:
+  workflow_dispatch: # Allow running the workflow manually from the GitHub UI
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v2
+
+      - name: Get next version
+        uses: reecetech/version-increment@2023.9.3
+        id: version
+        with:
+          scheme: semver
+          increment: patch
+
+      - name: Update versions
+        uses: jacobtomlinson/gha-find-replace@v3
+        with:
+          include: "*.csproj"
+          find: "1.0.0-beta"
+          replace: "${{ steps.version.outputs.version }}"
+          regex: false
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Install dependencies
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --configuration Release --no-restore
+
+      - name: Publish Strata
+        uses: brandedoutcast/publish-nuget@v2.5.2
+        with:
+          PROJECT_FILE_PATH: src/Strata/Strata.csproj
+          NUGET_KEY: ${{secrets.NUGET_API_KEY}}

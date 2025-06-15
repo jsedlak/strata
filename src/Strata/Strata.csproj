@@ -1,0 +1,27 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>net9.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<RootNamespace>Strata</RootNamespace>
+		<Authors>John Sedlak</Authors>
+		<AssemblyTitle>Strata</AssemblyTitle>
+		<AssemblyName>Strata</AssemblyName>
+		<Description>Provides the Orleans implementation of Event Sourcing</Description>
+		<PackageId>Strata</PackageId>
+		<PackageTags>orleans;cqrs;event sourcing</PackageTags>
+		<PackageProjectUrl>https://github.com/jsedlak/strata</PackageProjectUrl>
+		<RepositoryUrl>https://github.com/jsedlak/strata</RepositoryUrl>
+		<Version>1.0.0-beta</Version>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.2" />
+		<PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.2" />
+		<PackageReference Include="Microsoft.Extensions.Options" Version="9.0.2" />
+		<PackageReference Include="System.Memory.Data" Version="9.0.2" />
+		<PackageReference Include="Microsoft.Orleans.Sdk" Version="9.1.2" />
+		<PackageReference Include="Microsoft.Orleans.Streaming" Version="9.1.2" />
+	</ItemGroup>
+</Project>
