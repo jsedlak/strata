@@ -11,6 +11,7 @@
 		<PackageIconUrl>https://raw.githubusercontent.com/jsedlak/strata/refs/heads/main/img/icon.png</PackageIconUrl>
 		<Description>Provides the Orleans implementation of Event Sourcing</Description>
 		<PackageId>Strata</PackageId>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
 		<PackageTags>orleans;cqrs;event sourcing</PackageTags>
 		<PackageProjectUrl>https://github.com/jsedlak/strata</PackageProjectUrl>
 		<RepositoryUrl>https://github.com/jsedlak/strata</RepositoryUrl>
