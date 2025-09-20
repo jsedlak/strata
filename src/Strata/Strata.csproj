@@ -26,4 +26,8 @@
 		<PackageReference Include="Microsoft.Orleans.Sdk" Version="9.1.2" />
 		<PackageReference Include="Microsoft.Orleans.Streaming" Version="9.1.2" />
 	</ItemGroup>
+
+	<ItemGroup>
+		<None Include="README.md" Pack="true" PackagePath="\" />
+	</ItemGroup>
 </Project>
