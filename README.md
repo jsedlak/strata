@@ -14,6 +14,7 @@ Strata is an opinionated Event Sourcing library built for Microsoft Orleans.
 - 📷 Snapshotting
 - ⏱️ Delayed Writes
 - 🗃️ Orleans Provider Model
+- ⚡ [Event Handlers](doc/event-handlers.md)
 
 ## Coming Soon
 
