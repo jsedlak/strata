@@ -1,7 +1,9 @@
 using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Orleans.Runtime;
 using Strata;
+using Strata.Eventing;
 using Strata.Snapshotting;
 
 namespace Strata;
@@ -14,6 +16,9 @@ public abstract class EventSourcedGrain<TGrainState, TEventBase> : Grain, ILifec
     private bool _saveOnRaise = false;
     private ISnapshotStrategy<TGrainState>? _snapshotStrategy;
     private IEventLog<TGrainState, TEventBase> _eventLog = null!;
+    private EventHandlerRegistry _eventHandlerRegistry = null!;
+    private EventHandlerOptions _eventHandlerOptions = new();
+    private ILogger? _logger;
     
     public virtual void Participate(IGrainLifecycle lifecycle)
     {
@@ -31,18 +36,33 @@ public abstract class EventSourcedGrain<TGrainState, TEventBase> : Grain, ILifec
     }
     
     #region Interaction
-    protected virtual Task Raise(TEventBase @event)
+    protected virtual async Task Raise(TEventBase @event)
     {
+        _logger?.LogDebug("Raising event of type {EventType}", @event.GetType().Name);
+        await ProcessEventHandlers(@event);
+        _logger?.LogDebug("Event handlers processed for {EventType}", @event.GetType().Name);
+        
         _eventLog.Submit(@event);
 
-        return _saveOnRaise ? _eventLog.WaitForConfirmation() : Task.CompletedTask;
+        if (_saveOnRaise)
+        {
+            await _eventLog.WaitForConfirmation();
+        }
     }
 
-    protected virtual Task Raise(IEnumerable<TEventBase> events)
+    protected virtual async Task Raise(IEnumerable<TEventBase> events)
     {
-        _eventLog.Submit(events);
+        foreach (var @event in events)
+        {
+            await ProcessEventHandlers(@event);
+        }
         
-        return _saveOnRaise ? _eventLog.WaitForConfirmation() : Task.CompletedTask;
+        _eventLog.Submit(events);
+
+        if (_saveOnRaise)
+        {
+            await _eventLog.WaitForConfirmation();
+        }
     }
 
     protected Task WaitForConfirmation()
@@ -99,6 +119,16 @@ public abstract class EventSourcedGrain<TGrainState, TEventBase> : Grain, ILifec
         {
             _snapshotStrategy = snapshotFactory.Create<TGrainState>(GetType(), this.GetGrainId().ToString());
         }
+
+        // initialize event handler registry
+        _eventHandlerRegistry = new EventHandlerRegistry();
+        
+        // get logger and event handler options
+        _logger = ServiceProvider.GetService<ILogger<EventSourcedGrain<TGrainState, TEventBase>>>();
+        _eventHandlerOptions = ServiceProvider.GetService<EventHandlerOptions>() ?? new EventHandlerOptions();
+        
+        // Call virtual method to allow derived classes to register handlers early
+        OnSetupEventHandlers();
         
         return Task.CompletedTask;
     }
@@ -146,6 +176,9 @@ public abstract class EventSourcedGrain<TGrainState, TEventBase> : Grain, ILifec
             _saveTimer.Dispose();
             _saveTimer = null;
         }
+
+        // Clear event handlers on deactivation
+        _eventHandlerRegistry?.Clear();
     }
     #endregion
 
@@ -156,4 +189,133 @@ public abstract class EventSourcedGrain<TGrainState, TEventBase> : Grain, ILifec
     protected TGrainState ConfirmedState => _eventLog.ConfirmedView;
 
     protected int ConfirmedVersion => _eventLog.ConfirmedVersion;
+
+    #region Event Handler Setup
+
+    /// <summary>
+    /// Override this method to register event handlers during grain setup.
+    /// This is called after the event handler registry is initialized but before the grain is activated.
+    /// </summary>
+    protected virtual void OnSetupEventHandlers()
+    {
+        _logger?.LogDebug("OnSetupEventHandlers called for grain type {GrainType}", GetType().Name);
+        // Override in derived classes to register event handlers
+    }
+
+    #endregion
+
+    #region Event Handler Registration
+
+    /// <summary>
+    /// Registers a typed event handler for a specific event type.
+    /// </summary>
+    /// <typeparam name="TEvent">The type of event to handle.</typeparam>
+    /// <param name="handler">The handler delegate.</param>
+    /// <exception cref="ArgumentNullException">Thrown when handler is null.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the grain is not properly initialized.</exception>
+    public virtual void RegisterEventHandler<TEvent>(EventHandlerDelegate<TEvent> handler)
+        where TEvent : TEventBase
+    {
+        if (handler == null)
+            throw new ArgumentNullException(nameof(handler));
+
+        if (_eventHandlerRegistry == null)
+            throw new InvalidOperationException("Event handler registry is not initialized. Ensure the grain is properly activated.");
+
+        _eventHandlerRegistry.RegisterEventHandler(handler);
+    }
+
+    /// <summary>
+    /// Registers an untyped event handler that will be called for all events.
+    /// </summary>
+    /// <param name="handler">The handler delegate.</param>
+    /// <exception cref="ArgumentNullException">Thrown when handler is null.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the grain is not properly initialized.</exception>
+    public virtual void RegisterEventHandler(EventHandlerDelegate handler)
+    {
+        if (handler == null)
+            throw new ArgumentNullException(nameof(handler));
+
+        if (_eventHandlerRegistry == null)
+            throw new InvalidOperationException("Event handler registry is not initialized. Ensure the grain is properly activated.");
+
+        _eventHandlerRegistry.RegisterEventHandler(handler);
+    }
+
+    #endregion
+
+    #region Event Handler Processing
+
+    /// <summary>
+    /// Processes all registered event handlers for the given event.
+    /// </summary>
+    /// <param name="event">The event to process.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    protected virtual async Task ProcessEventHandlers(TEventBase @event)
+    {
+        if (_eventHandlerRegistry == null)
+        {
+            _logger?.LogWarning("Event handler registry is null for event type {EventType}", @event.GetType().Name);
+            return;
+        }
+
+        if (_eventHandlerRegistry.HandlerCount == 0)
+        {
+            _logger?.LogDebug("No event handlers registered for event type {EventType}", @event.GetType().Name);
+            return;
+        }
+
+        var handlers = _eventHandlerRegistry.GetHandlersForEvent(@event.GetType());
+        var handlerList = handlers.ToList();
+        _logger?.LogDebug("Found {HandlerCount} handlers for event type {EventType}", handlerList.Count, @event.GetType().Name);
+        
+        if (handlerList.Count == 0)
+        {
+            _logger?.LogWarning("No handlers found for event type {EventType}. Available handler types: {HandlerTypes}", 
+                @event.GetType().Name, 
+                string.Join(", ", _eventHandlerRegistry.GetType().GetField("_typedHandlers", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.GetValue(_eventHandlerRegistry)?.ToString() ?? "unknown"));
+        }
+        
+        foreach (var handler in handlers)
+        {
+            try
+            {
+                if (_eventHandlerOptions.LogHandlerExecution)
+                {
+                    _logger?.LogDebug("Executing event handler for event type {EventType}", @event.GetType().Name);
+                }
+
+                var handlerTask = handler(@event);
+                
+                if (_eventHandlerOptions.MaxHandlerExecutionTime.HasValue)
+                {
+                    using var cts = new CancellationTokenSource(_eventHandlerOptions.MaxHandlerExecutionTime.Value);
+                    await handlerTask.WaitAsync(cts.Token);
+                }
+                else
+                {
+                    await handlerTask;
+                }
+
+                if (_eventHandlerOptions.LogHandlerExecution)
+                {
+                    _logger?.LogDebug("Event handler completed successfully for event type {EventType}", @event.GetType().Name);
+                }
+            }
+            catch (Exception ex)
+            {
+                if (_eventHandlerOptions.LogHandlerErrors)
+                {
+                    _logger?.LogError(ex, "Event handler failed for event type {EventType}", @event.GetType().Name);
+                }
+
+                if (_eventHandlerOptions.FailFastOnHandlerError)
+                {
+                    throw;
+                }
+            }
+        }
+    }
+
+    #endregion
 }
