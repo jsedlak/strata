@@ -75,9 +75,10 @@ We then register this event with our Domain Model Grain.
 
 ```csharp
 internal sealed class AccountGrain :
-    EventSourcedGrain<Account, BaseAccountEvent> {
-
-    public override Task OnActivateAsync(CancellationToken cancellationToken)
+    EventSourcedGrain<Account, BaseAccountEvent>
+{
+    public override Task OnActivateAsync(
+        CancellationToken cancellationToken)
     {
         this.RegisterProjection<AccountViewModelProjection>();
 
@@ -95,8 +96,9 @@ For each type that is passed into the `RegisterProjection` method, a `Projection
 1. This Grain is identified by the type of projection via a compound string key based on your grain's ID: "{grain id}/{projection type}"
 2. The Grain implements `IProjectionGrain` and uses an internal queue mechanism to ensure that work is ordered.
 3. When this Grain's `Apply` method is called, the event is queued internally. It then uses a worker thread to manage processing of the queue. If the internal worker thread is not running, it is spun up immediately.
-4. When the internal thread is initialized, the queue is cleared and all work is processed for that instance of the thread.
-5. When the internal worker task is completed, the queue is checked and if any new work is present, the process starts again.
+4. The `Apply` method is marked `[OneWay]`
+5. When the internal thread is initialized, the queue is cleared and all work is processed for that instance of the thread.
+6. When the internal worker task is completed, the queue is checked and if any new work is present, the process starts again.
 
 #### Reference: IProjectionGrain
 
@@ -123,3 +125,23 @@ Simply create a Grain that inherits the `EventRecipientGrain` type, and implemen
 The `EventRecipientGrain` will utilize the stream subscription, loop through the available `IProjection<TEvent>` implementations and call each one as necessary.
 
 For this to work, there needs to be a coupling in the Stream Source and Stream Subscription, so it's best to use the `StreamingEventSourcedGrain` type and mark the Recipient Grain with an implicit stream subscription that matches.
+
+```csharp
+[ImplicitStreamSubscription(Streams.AccountStream)]
+internal sealed class MyProjectionGrain :
+    EventRecipientGrain,
+    IMyProjectionGrain,
+    IProjection<AmountAddedEvent>,
+    IProjection<AmountRemovedEvent>
+{
+    Task Handle(AmountAddedEvent @event)
+    {
+        // ... do something with the event
+    }
+
+    Task Handle(AmountRemovedEvent @event)
+    {
+        // ... do something with the event
+    }
+}
+```
