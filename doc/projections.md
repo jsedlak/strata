@@ -2,7 +2,15 @@
 
 A Projection is a process by which data from an Event is used to alter the View Model or downstream system. In the simplest way, a Projection is the ability to execute code asynchronously as the result of an Event occuring.
 
-For any grain that utilizes the Strata base, either `StreamingEventSourcedGrain` or `EventSourcedGrain` there is the ability to opt-in for automatic projections.
+There are two flavors of Projections in the Strata Framework. **Host Managed** and **Projection Managed**.
+
+## Host Managed Projections
+
+Host Managed Projections use Orleans' OneWay calls to initiate application of any number of projections on a well-known Grain type, the `ProjectionGrain`, from the source, a Domain Model Grain that inherits `StreamingEventSourcedGrain` or `EventSourcedGrain`.
+
+To register your projections, use the extension method, `RegisterProjection<T>` during the `OnActivateAsync` method of your Domain Model Grain.
+
+### Example
 
 Consider the `Account` model as follows.
 
@@ -42,7 +50,7 @@ public sealed class AccountViewModel
 
 In the case of a view model, it is a POCO that represents the latest state of the Account in a way that is meant for a specific front-end use case. There may be many such view models, each with its own set of properties and use cases.
 
-## Adding a Projection
+#### Adding a Projection
 
 To support keeping this View Model up-to-date, we add a Projection class.
 
@@ -80,7 +88,7 @@ internal sealed class AccountGrain :
 
 This registers an event handler that will be called whenever the `RaiseEvent` methods are called, receiving the event(s) as a result. The internal mechanism of Strata's EventSourcedGrain will need to be updated to support such event handler registrations, via a protected `RegisterEventHandler` method.
 
-## Projection Grains
+### Projection Grains
 
 For each type that is passed into the `RegisterProjection` method, a `ProjectionGrain` is spun up. The `ProjectionGrain` does a few things to help offload the work from the Domain Model Grain (`AccountGrain`).
 
@@ -90,7 +98,7 @@ For each type that is passed into the `RegisterProjection` method, a `Projection
 4. When the internal thread is initialized, the queue is cleared and all work is processed for that instance of the thread.
 5. When the internal worker task is completed, the queue is checked and if any new work is present, the process starts again.
 
-### Reference: IProjectionGrain
+#### Reference: IProjectionGrain
 
 ```csharp
 public interface IProjectionGrain : IGrainWithStringKey
@@ -99,9 +107,19 @@ public interface IProjectionGrain : IGrainWithStringKey
 }
 ```
 
-# Relevant Classes
+#### Relevant Classes
 
 - Strata.Projections.IProjectionGrain
 - Strata.Projections.ProjectionGrain
 - Strata.Projections.IProjection<TEvent>
 - Strata.Projections.GrainExtensions
+
+## Projection Managed Grains
+
+For those who wish to use an Orleans Stream to provide asynchronous communication between the Domain Model (Host) Grain and the Projection Grain, the Projection Managed Grain option offers built-in capabilities for processing events.
+
+Simply create a Grain that inherits the `EventRecipientGrain` type, and implements any number of the `IProjection<TEvent>` interfaces, one for each event you wish to handle.
+
+The `EventRecipientGrain` will utilize the stream subscription, loop through the available `IProjection<TEvent>` implementations and call each one as necessary.
+
+For this to work, there needs to be a coupling in the Stream Source and Stream Subscription, so it's best to use the `StreamingEventSourcedGrain` type and mark the Recipient Grain with an implicit stream subscription that matches.
