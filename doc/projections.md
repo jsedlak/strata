@@ -89,7 +89,7 @@ internal sealed class AccountGrain :
 
 This registers an event handler that will be called whenever the `RaiseEvent` methods are called, receiving the event(s) as a result. The internal mechanism of Strata's EventSourcedGrain will need to be updated to support such event handler registrations, via a protected `RegisterEventHandler` method.
 
-### Projection Grains
+### Projection Grain
 
 For each type that is passed into the `RegisterProjection` method, a `ProjectionGrain` is spun up. The `ProjectionGrain` does a few things to help offload the work from the Domain Model Grain (`AccountGrain`).
 
@@ -127,6 +127,7 @@ The `EventRecipientGrain` will utilize the stream subscription, loop through the
 For this to work, there needs to be a coupling in the Stream Source and Stream Subscription, so it's best to use the `StreamingEventSourcedGrain` type and mark the Recipient Grain with an implicit stream subscription that matches.
 
 ```csharp
+// end developer implements this grain
 [ImplicitStreamSubscription(Streams.AccountStream)]
 internal sealed class MyProjectionGrain :
     EventRecipientGrain,
