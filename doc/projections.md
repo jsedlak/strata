@@ -94,33 +94,35 @@ public static class GrainExtensions
 {
     public static void RegisterProjection<TProjection>(
         this EventSourcedGrain grain
-    ) {
-        // ... get all IProjection<TEvent> that the TProjection implements
-        // ... get all the TEvent types
+    ) where TProjection : class
+    {
+        // Get all IProjection<TEvent> that the TProjection implements
         var eventTypes = GetAllEventTypes<TProjection>();
 
-        foreach(var et in eventTypes) {
+        foreach(var eventType in eventTypes)
+        {
             grain.RegisterEventHandler(
-                et,
+                eventType,
                 async (@event) => {
-                    var projectionGrain = grain.ClusterClient.GetGrain<IProjectionGrain>(
-                        grain.GetGrainId().ToString()
-                    );
+                    // Use Orleans' built-in grain factory with proper typing
+                    var projectionGrain = grain.GrainFactory.GetGrain<IProjectionGrain>(
+                        $"{grain.GetGrainId()}/{typeof(TProjection).Name}");
 
-                    // how do we pass this object so it serializes correctly?
-                    await projectionGrain.Apply(et.FullName, @event)
+                    // Use generic method to maintain type safety
+                    await projectionGrain.ApplyProjection(@event, typeof(TProjection).Name);
                 }
             );
         }
-        this.RegisterEventHandler<>
     }
 }
 ```
 
-To enable this...
+This approach provides:
 
-- The Event Handler methods will need overrides to support passing in a type parameter instead of the generic type
-- How do we ensure we can pass any event through `IProjectionGrain.Apply(projectionType, event)` and onward to the `TProjection.Handle` method?
+- **Type Safety**: Events are passed as strongly-typed objects, not strings
+- **Better Performance**: Uses Orleans' built-in grain factory instead of ClusterClient
+- **Cleaner API**: Generic method signature maintains compile-time type checking
+- **Proper Serialization**: Orleans handles serialization automatically for typed objects
 
 ### Projection Grain
 
@@ -138,9 +140,58 @@ For each type that is passed into the `RegisterProjection` method, a `Projection
 ```csharp
 public interface IProjectionGrain : IGrainWithStringKey
 {
-    Task Apply(string projectionType, string eventType, string @event);
+    [OneWay]
+    Task ApplyProjection<TEvent>(TEvent @event, string projectionType)
+        where TEvent : class;
 }
 ```
+
+#### Async Processing Pattern
+
+To ensure projections don't block the main event sourcing flow, the `EventSourcedGrain` processes projections asynchronously:
+
+```csharp
+protected virtual async Task Raise(TEventBase @event)
+{
+    _logger?.LogDebug("Raising event of type {EventType}", @event.GetType().Name);
+
+    // Process synchronous event handlers first
+    await ProcessEventHandlers(@event);
+
+    // Submit to event log
+    _eventLog.Submit(@event);
+
+    // Process projections asynchronously (fire-and-forget)
+    _ = Task.Run(async () => await ProcessProjectionsAsync(@event));
+
+    if (_saveOnRaise)
+    {
+        await _eventLog.WaitForConfirmation();
+    }
+}
+
+private async Task ProcessProjectionsAsync(TEventBase @event)
+{
+    try
+    {
+        var projectionTasks = GetRegisteredProjections(@event.GetType())
+            .Select(projectionType => ProcessProjectionAsync(projectionType, @event));
+
+        await Task.WhenAll(projectionTasks);
+    }
+    catch (Exception ex)
+    {
+        _logger?.LogError(ex, "Error processing projections for event {EventType}", @event.GetType().Name);
+    }
+}
+```
+
+This approach ensures:
+
+- **Non-blocking**: Main event sourcing flow continues without waiting for projections
+- **Parallel Processing**: Multiple projections can process the same event concurrently
+- **Error Isolation**: Projection failures don't affect the main event processing
+- **Performance**: Better overall throughput for high-volume event processing
 
 #### Relevant Classes
 
@@ -168,14 +219,24 @@ internal sealed class MyProjectionGrain :
     IProjection<AmountAddedEvent>,
     IProjection<AmountRemovedEvent>
 {
-    Task Handle(AmountAddedEvent @event)
+    public async Task Handle(AmountAddedEvent @event)
     {
         // ... do something with the event
+        // Projections are processed asynchronously via streams
     }
 
-    Task Handle(AmountRemovedEvent @event)
+    public async Task Handle(AmountRemovedEvent @event)
     {
         // ... do something with the event
+        // Projections are processed asynchronously via streams
     }
 }
 ```
+
+The `EventRecipientGrain` base class provides:
+
+- **Automatic Stream Subscription**: Handles Orleans stream subscription lifecycle
+- **Type-Safe Event Routing**: Uses reflection to route events to appropriate handler methods
+- **Error Handling**: Built-in error handling and logging for projection failures
+- **Async Processing**: All projection handlers are processed asynchronously
+- **State Management**: Optional support for maintaining projection state
