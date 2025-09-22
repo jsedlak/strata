@@ -87,7 +87,40 @@ internal sealed class AccountGrain :
 }
 ```
 
-This registers an event handler that will be called whenever the `RaiseEvent` methods are called, receiving the event(s) as a result. The internal mechanism of Strata's EventSourcedGrain will need to be updated to support such event handler registrations, via a protected `RegisterEventHandler` method.
+This registers an event handler using `RegisterEventHandler` with a typed callback. This in turn calls the ProjectionGrain to handle the call.
+
+```csharp
+public static class GrainExtensions
+{
+    public static void RegisterProjection<TProjection>(
+        this EventSourcedGrain grain
+    ) {
+        // ... get all IProjection<TEvent> that the TProjection implements
+        // ... get all the TEvent types
+        var eventTypes = GetAllEventTypes<TProjection>();
+
+        foreach(var et in eventTypes) {
+            grain.RegisterEventHandler(
+                et,
+                async (@event) => {
+                    var projectionGrain = grain.ClusterClient.GetGrain<IProjectionGrain>(
+                        grain.GetGrainId().ToString()
+                    );
+
+                    // how do we pass this object so it serializes correctly?
+                    await projectionGrain.Apply(et.FullName, @event)
+                }
+            );
+        }
+        this.RegisterEventHandler<>
+    }
+}
+```
+
+To enable this...
+
+- The Event Handler methods will need overrides to support passing in a type parameter instead of the generic type
+- How do we ensure we can pass any event through `IProjectionGrain.Apply(projectionType, event)` and onward to the `TProjection.Handle` method?
 
 ### Projection Grain
 
@@ -105,7 +138,7 @@ For each type that is passed into the `RegisterProjection` method, a `Projection
 ```csharp
 public interface IProjectionGrain : IGrainWithStringKey
 {
-    Task Apply(object @event);
+    Task Apply(string projectionType, string eventType, string @event);
 }
 ```
 
