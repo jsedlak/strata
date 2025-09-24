@@ -11,6 +11,8 @@ Strata is an opinionated Event Sourcing library built for Microsoft Orleans.
 - ⏱️ Delayed Writes
 - 🗃️ Orleans Provider Model via Durable Framework
 - ⚡ Outbox Recipients & Projections
+- 🏁 Retry, Replay, and Dry-Run Capabilities
+- 📨 OOB Recipients: Direct Grain Calls, Orleans Streams, Recipient Handling
 
 ## Examples
 
