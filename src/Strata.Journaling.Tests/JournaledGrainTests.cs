@@ -4,11 +4,6 @@ public class JournaledGrainTests(IntegrationTestFixture fixture) : IClassFixture
 {
     private IGrainFactory Client => fixture.Client;
 
-    /// <summary>
-    /// Tests basic state persistence for a durable grain.
-    /// Verifies that simple state properties (string and int) are correctly
-    /// persisted and recovered after grain deactivation.
-    /// </summary>
     [Fact]
     public async Task JournaledGrain_CanHandleEvents()
     {
@@ -37,5 +32,21 @@ public class JournaledGrainTests(IntegrationTestFixture fixture) : IClassFixture
         var projectionGrain = Client.GetGrain<IAccountViewModelGrain>("testaccount");
         var projectedBalance = await projectionGrain.GetBalance();
         Assert.Equal(60, projectedBalance);
+    }
+
+    [Fact]
+    public async Task JournaledGrain_MultipleGrains()
+    {
+        var grain1 = Client.GetGrain<IAccountGrain>(Guid.NewGuid().ToString());
+        var grain2 = Client.GetGrain<IAccountGrain>(Guid.NewGuid().ToString());
+
+        await grain1.Deposit(100);
+        await grain2.Deposit(200);
+
+        var balance1 = await grain1.GetBalance();
+        var balance2 = await grain2.GetBalance();
+
+        Assert.Equal(100, balance1);
+        Assert.Equal(200, balance2);
     }
 }
