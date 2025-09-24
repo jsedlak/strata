@@ -15,6 +15,13 @@ internal sealed class AccountGrain :
     {
     }
 
+    public async Task Deactivate()
+    {
+        await Deactivate();
+    }
+
+    public Task<BaseAccountEvent[]> GetEvents() => Task.FromResult(Log);
+
     public Task<double> GetBalance() => Task.FromResult(ConfirmedState.Balance);
 
     public async Task Deposit(double amount)

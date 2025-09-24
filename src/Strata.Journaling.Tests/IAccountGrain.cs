@@ -7,4 +7,8 @@ public interface IAccountGrain : IGrainWithStringKey
     Task Withdraw(double amount);
 
     Task<double> GetBalance();
+
+    Task Deactivate();
+
+    Task<BaseAccountEvent[]> GetEvents();
 }

@@ -49,5 +49,7 @@ public abstract class JournaledGrainBase<TModel, TEvent> : DurableGrain
         // initiate background processing of the outbox ??
     }
 
+    protected TEvent[] Log => _eventLog.ToArray();
+
     protected TModel ConfirmedState => _state.State;
 }

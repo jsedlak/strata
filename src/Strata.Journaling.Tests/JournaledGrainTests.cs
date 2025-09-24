@@ -13,11 +13,25 @@ public class JournaledGrainTests(IntegrationTestFixture fixture) : IClassFixture
     public async Task JournaledGrain_CanHandleEvents()
     {
         var grain = Client.GetGrain<IAccountGrain>("testaccount");
+        
         await grain.Deposit(100);
+        
         var balance = await grain.GetBalance();
         Assert.Equal(100, balance);
+        
         await grain.Withdraw(40);
+        
         balance = await grain.GetBalance();
         Assert.Equal(60, balance);
+
+        await grain.Deactivate();
+
+        var grain2 = Client.GetGrain<IAccountGrain>("testaccount");
+
+        var storedBalance = await grain2.GetBalance();
+        Assert.Equal(60, storedBalance);
+
+        var events = await grain2.GetEvents();
+        Assert.Equal(2, events.Length);
     }
 }
