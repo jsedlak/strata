@@ -33,5 +33,9 @@ public class JournaledGrainTests(IntegrationTestFixture fixture) : IClassFixture
 
         var events = await grain2.GetEvents();
         Assert.Equal(2, events.Length);
+
+        var projectionGrain = Client.GetGrain<IAccountViewModelGrain>("testaccount");
+        var projectedBalance = await projectionGrain.GetBalance();
+        Assert.Equal(60, projectedBalance);
     }
 }

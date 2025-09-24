@@ -10,15 +10,22 @@ public abstract class JournaledGrainBase<TModel, TEvent> : DurableGrain
     private readonly IDurableQueue<OutboxEnvelope<TEvent>> _outbox;
     private readonly IPersistentState<TModel> _state;
 
+    private readonly Dictionary<string, IOutboxRecipient<TEvent>> _outboxRecipients = new();
+
     public JournaledGrainBase(
-        [FromKeyedServices("log")]IDurableList<TEvent> eventLog,
-        [FromKeyedServices("outbox")]IDurableQueue<OutboxEnvelope<TEvent>> outbox,
-        [FromKeyedServices("state")]IPersistentState<TModel> state
+        [FromKeyedServices("log")] IDurableList<TEvent> eventLog,
+        [FromKeyedServices("outbox")] IDurableQueue<OutboxEnvelope<TEvent>> outbox,
+        [FromKeyedServices("state")] IPersistentState<TModel> state
     )
     {
         _eventLog = eventLog;
         _outbox = outbox;
         _state = state;
+    }
+
+    protected void RegisterRecipient(string key, IOutboxRecipient<TEvent> recipient)
+    {
+        _outboxRecipients.Add(key, recipient);
     }
 
     protected virtual async Task RaiseEvent(TEvent @event)
@@ -36,7 +43,7 @@ public abstract class JournaledGrainBase<TModel, TEvent> : DurableGrain
 
         // add it to the outbox ... we can loop through a list of providers and add one per provider
         // we pass the event and the version, so that the consumer can handle ordering / deduplication
-        _outbox.Append(new OutboxEnvelope<TEvent>(
+        _outbox.Enqueue(new OutboxEnvelope<TEvent>(
             @event,
             _state.State.Version,
             "OrleansStream",
@@ -46,7 +53,26 @@ public abstract class JournaledGrainBase<TModel, TEvent> : DurableGrain
         // Save it in one shot
         await WriteStateAsync();
 
+        // dequeue all outbox items into an array
+        var items = new List<OutboxEnvelope<TEvent>>();
+        while (_outbox.TryDequeue(out var item))
+        {
+            items.Add(item);
+        }
+
         // initiate background processing of the outbox ??
+        Parallel.ForEach<OutboxEnvelope<TEvent>>(
+            items,
+            async (item) =>
+            {
+                if (_outboxRecipients.TryGetValue(item.Destination, out var recipient))
+                {
+                    await recipient.Handle(item.Version, item.Event);
+                    item.State = OutboxState.Sent;
+                    await WriteStateAsync();
+                }
+            }
+        );
     }
 
     protected TEvent[] Log => _eventLog.ToArray();

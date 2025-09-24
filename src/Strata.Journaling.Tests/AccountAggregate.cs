@@ -9,8 +9,11 @@ public class AccountAggregate : IAggregate
     }
 
     [Id(0)]
-    public int Version { get; set; }
+    public string Id { get; set; } = null!;
 
     [Id(1)]
+    public int Version { get; set; }
+
+    [Id(2)]
     public double Balance { get; set; }
 }
