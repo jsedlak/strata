@@ -35,9 +35,10 @@ internal sealed class AccountGrain :
         RegisterRecipient(nameof(AccountProjection), new AccountProjection(this.GrainFactory));
     }
 
-    public async Task Deactivate()
+    public ValueTask Deactivate()
     {
         this.DeactivateOnIdle();
+        return ValueTask.CompletedTask;
     }
 
     public Task<BaseAccountEvent[]> GetEvents() => Task.FromResult(Log);

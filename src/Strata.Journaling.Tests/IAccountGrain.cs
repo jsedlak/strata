@@ -8,7 +8,7 @@ public interface IAccountGrain : IGrainWithStringKey
 
     Task<double> GetBalance();
 
-    Task Deactivate();
+    ValueTask Deactivate();
 
     Task<BaseAccountEvent[]> GetEvents();
 }

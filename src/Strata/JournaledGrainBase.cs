@@ -43,12 +43,15 @@ public abstract class JournaledGrainBase<TModel, TEvent> : DurableGrain
 
         // add it to the outbox ... we can loop through a list of providers and add one per provider
         // we pass the event and the version, so that the consumer can handle ordering / deduplication
-        _outbox.Enqueue(new OutboxEnvelope<TEvent>(
-            @event,
-            _state.State.Version,
-            "OrleansStream",
-            OutboxState.Pending
-        ));
+        foreach(var recipient in _outboxRecipients.Keys)
+        {
+            _outbox.Enqueue(new OutboxEnvelope<TEvent>(
+                @event,
+                _state.State.Version,
+                recipient,
+                OutboxState.Pending
+            ));
+        }
 
         // Save it in one shot
         await WriteStateAsync();
