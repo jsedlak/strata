@@ -37,7 +37,7 @@ internal sealed class AccountGrain :
 
     public async Task Deactivate()
     {
-        await Deactivate();
+        this.DeactivateOnIdle();
     }
 
     public Task<BaseAccountEvent[]> GetEvents() => Task.FromResult(Log);
