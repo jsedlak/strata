@@ -1,10 +1,7 @@
 using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Orleans.Runtime;
-using Strata;
 using Strata.Eventing;
-using Strata.Projections;
 using Strata.Snapshotting;
 
 namespace Strata;
@@ -20,7 +17,6 @@ public abstract class EventSourcedGrain<TGrainState, TEventBase> : Grain, ILifec
     private EventHandlerRegistry _eventHandlerRegistry = null!;
     private EventHandlerOptions _eventHandlerOptions = new();
     private ILogger? _logger;
-    private ProjectionRegistry? _projectionRegistry;
     
     public virtual void Participate(IGrainLifecycle lifecycle)
     {
@@ -46,9 +42,6 @@ public abstract class EventSourcedGrain<TGrainState, TEventBase> : Grain, ILifec
         
         _eventLog.Submit(@event);
 
-        // Process projections asynchronously (fire-and-forget)
-        _ = Task.Run(async () => await ProcessProjectionsAsync(@event));
-
         if (_saveOnRaise)
         {
             await _eventLog.WaitForConfirmation();
@@ -63,12 +56,6 @@ public abstract class EventSourcedGrain<TGrainState, TEventBase> : Grain, ILifec
         }
         
         _eventLog.Submit(events);
-
-        // Process projections asynchronously for each event (fire-and-forget)
-        foreach (var @event in events)
-        {
-            _ = Task.Run(async () => await ProcessProjectionsAsync(@event));
-        }
 
         if (_saveOnRaise)
         {
@@ -137,9 +124,6 @@ public abstract class EventSourcedGrain<TGrainState, TEventBase> : Grain, ILifec
         // get logger and event handler options
         _logger = ServiceProvider.GetService<ILogger<EventSourcedGrain<TGrainState, TEventBase>>>();
         _eventHandlerOptions = ServiceProvider.GetService<EventHandlerOptions>() ?? new EventHandlerOptions();
-        
-        // get projection registry
-        _projectionRegistry = ServiceProvider.GetService<ProjectionRegistry>();
         
         // Call virtual method to allow derived classes to register handlers early
         OnSetupEventHandlers();
@@ -333,74 +317,5 @@ public abstract class EventSourcedGrain<TGrainState, TEventBase> : Grain, ILifec
 
     #endregion
 
-    #region Projection Processing
-
-    /// <summary>
-    /// Processes projections for the given event asynchronously.
-    /// </summary>
-    /// <param name="event">The event to process projections for.</param>
-    /// <returns>A task representing the asynchronous operation.</returns>
-    protected virtual async Task ProcessProjectionsAsync(TEventBase @event)
-    {
-        if (_projectionRegistry == null)
-        {
-            _logger?.LogDebug("Projection registry is not available, skipping projection processing for event {EventType}", @event.GetType().Name);
-            return;
-        }
-
-        try
-        {
-            var eventType = @event.GetType();
-            var projectionTypes = _projectionRegistry.GetProjectionsForEventType(eventType);
-
-            if (!projectionTypes.Any())
-            {
-                _logger?.LogDebug("No projections registered for event type {EventType}", eventType.Name);
-                return;
-            }
-
-            _logger?.LogDebug("Processing {ProjectionCount} projections for event type {EventType}", projectionTypes.Count, eventType.Name);
-
-            // Process each projection asynchronously
-            var projectionTasks = projectionTypes.Select(projectionType => ProcessProjectionAsync(@event, projectionType));
-            await Task.WhenAll(projectionTasks);
-
-            _logger?.LogDebug("Completed processing projections for event type {EventType}", eventType.Name);
-        }
-        catch (Exception ex)
-        {
-            _logger?.LogError(ex, "Error processing projections for event type {EventType}", @event.GetType().Name);
-            // Don't rethrow - projections should not affect main event processing
-        }
-    }
-
-    /// <summary>
-    /// Processes a single projection for the given event.
-    /// </summary>
-    /// <param name="event">The event to process.</param>
-    /// <param name="projectionType">The projection type to process.</param>
-    /// <returns>A task representing the asynchronous operation.</returns>
-    private async Task ProcessProjectionAsync(TEventBase @event, Type projectionType)
-    {
-        try
-        {
-            // Get the projection grain
-            var projectionGrain = GrainFactory.GetGrain<IProjectionGrain>(
-                $"{this.GetGrainId()}_{projectionType.Name}");
-
-            // Apply the projection
-            await projectionGrain.ApplyProjection(@event, projectionType.FullName ?? projectionType.Name);
-
-            _logger?.LogDebug("Successfully processed projection {ProjectionType} for event {EventType}", 
-                projectionType.Name, @event.GetType().Name);
-        }
-        catch (Exception ex)
-        {
-            _logger?.LogError(ex, "Error processing projection {ProjectionType} for event {EventType}", 
-                projectionType.Name, @event.GetType().Name);
-            // Don't rethrow - individual projection failures should not affect others
-        }
-    }
-
-    #endregion
+    
 }
