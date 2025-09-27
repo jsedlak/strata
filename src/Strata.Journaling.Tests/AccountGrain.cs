@@ -1,37 +1,12 @@
-﻿using Microsoft.Extensions.DependencyInjection;
-using Orleans.Journaling;
-
-namespace Strata.Journaling.Tests;
+﻿namespace Strata.Journaling.Tests;
 
 [GrainType("account")]
 internal sealed class AccountGrain :
-    JournaledGrainBase<AccountAggregate, BaseAccountEvent>,
+    JournaledGrain<AccountAggregate, BaseAccountEvent>,
     IAccountGrain
 {
-    private readonly IPersistentState<AccountAggregate> _state;
-
-    public AccountGrain(
-        [FromKeyedServices("log")] IDurableList<BaseAccountEvent> eventLog,
-        [FromKeyedServices("outbox")] IDurableQueue<OutboxEnvelope<BaseAccountEvent>> outbox,
-        [FromKeyedServices("state")] IPersistentState<AccountAggregate> state
-    ) : base(eventLog, outbox, state)
+    protected override void OnRegisterRecipients()
     {
-        _state = state;
-    }
-
-    public override async Task OnActivateAsync(CancellationToken cancellationToken)
-    {
-        await base.OnActivateAsync(cancellationToken);
-
-        if (!_state.RecordExists)
-        {
-            _state.State = new();
-            _state.State.Id = this.GetPrimaryKeyString();
-            _state.State.Version = 1;
-
-            await WriteStateAsync();
-        }
-
         RegisterRecipient(nameof(AccountProjection), new AccountProjection(this.GrainFactory));
     }
 
@@ -41,7 +16,19 @@ internal sealed class AccountGrain :
         return ValueTask.CompletedTask;
     }
 
-    public Task<BaseAccountEvent[]> GetEvents() => Task.FromResult(Log);
+    public override async Task OnActivateAsync(CancellationToken cancellationToken)
+    {
+        await base.OnActivateAsync(cancellationToken);
+        Console.WriteLine("[{0}] OnActivateAsync", this.GetPrimaryKeyString());
+    }
+
+    public override async Task OnDeactivateAsync(DeactivationReason reason, CancellationToken cancellationToken)
+    {
+        await base.OnDeactivateAsync(reason, cancellationToken);
+        Console.WriteLine("[{0}] OnDeactivateAsync", this.GetPrimaryKeyString());
+    }
+
+    public Task<BaseAccountEvent[]> GetEvents() => Task.FromResult(Log.Select(e => e.Event).ToArray());
 
     public Task<double> GetBalance() => Task.FromResult(ConfirmedState.Balance);
 

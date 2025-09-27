@@ -3,33 +3,47 @@ using Orleans.Journaling;
 
 namespace Strata;
 
-public abstract class JournaledGrainBase<TModel, TEvent> : DurableGrain, IJournaledGrain
-    where TModel : IAggregate, new()
+public abstract class JournaledGrain<TModel, TEvent> :
+    DurableGrain, IJournaledGrain, ILifecycleParticipant<IGrainLifecycle>
+    where TModel : new()
     where TEvent : notnull
 {
-    private readonly IDurableList<TEvent> _eventLog;
-    private readonly IDurableQueue<OutboxEnvelope<TEvent>> _outbox;
-    private readonly IPersistentState<TModel> _state;
+    private IDurableList<EventEnvelope<TEvent>> _journal = null!;
+    private IDurableQueue<OutboxEnvelope<TEvent>> _outbox = null!;
+    private IPersistentState<AggregateEnvelope<TModel>> _aggregate = null!;
 
     private readonly Dictionary<string, IOutboxRecipient<TEvent>> _outboxRecipients = new();
 
     private IGrainTimer? _outboxTimer = null;
 
-    public JournaledGrainBase(
-        [FromKeyedServices("log")] IDurableList<TEvent> eventLog,
-        [FromKeyedServices("outbox")] IDurableQueue<OutboxEnvelope<TEvent>> outbox,
-        [FromKeyedServices("state")] IPersistentState<TModel> state
-    )
+    #region Lifecycle
+    public void Participate(IGrainLifecycle lifecycle)
     {
-        _eventLog = eventLog;
-        _outbox = outbox;
-        _state = state;
+        lifecycle.Subscribe<JournaledGrain<TModel, TEvent>>(
+            GrainLifecycleStage.SetupState - 1,
+            OnHydrateState,
+            OnDestroyState
+        );
     }
 
-    public override async Task OnActivateAsync(CancellationToken cancellationToken)
+    private async Task OnHydrateState(CancellationToken cancellationToken)
     {
-        await base.OnActivateAsync(cancellationToken);
-        
+        Console.WriteLine("OnHydrateState");
+
+        _aggregate = ServiceProvider.GetRequiredKeyedService<IPersistentState<AggregateEnvelope<TModel>>>("aggregate");
+        _journal = ServiceProvider.GetRequiredKeyedService<IDurableList<EventEnvelope<TEvent>>>("journal");
+        _outbox = ServiceProvider.GetRequiredKeyedService<IDurableQueue<OutboxEnvelope<TEvent>>>("outbox");
+
+        if (!_aggregate.RecordExists)
+        {
+            _aggregate.State = new();
+            _aggregate.State.Version = 1;
+
+            await WriteStateAsync();
+        }
+
+        OnRegisterRecipients();
+
         _outboxTimer = this.RegisterGrainTimer(
             ProcessOutbox,
             new GrainTimerCreationOptions
@@ -41,29 +55,40 @@ public abstract class JournaledGrainBase<TModel, TEvent> : DurableGrain, IJourna
         );
     }
 
-    public override async Task OnDeactivateAsync(DeactivationReason reason, CancellationToken cancellationToken)
+    protected virtual void OnRegisterRecipients()
     {
-        await this.ProcessOutbox();
-        await base.OnDeactivateAsync(reason, cancellationToken);
+        /* no op */
     }
 
+    private async Task OnDestroyState(CancellationToken cancellationToken)
+    {
+        /* try to process the outbox */
+        await ProcessOutbox();
+    }
+    #endregion
+
+    #region Recipient Management
     protected void RegisterRecipient(string key, IOutboxRecipient<TEvent> recipient)
     {
         _outboxRecipients.Add(key, recipient);
     }
+    #endregion
 
+    #region Event Processing
     protected virtual async Task RaiseEvent(TEvent @event)
     {
+        var newVersion = _aggregate.State.Version + 1;
+
         // add it to the log
-        _eventLog.Add(@event);
+        _journal.Add(new EventEnvelope<TEvent> { Event = @event, Version = newVersion });
 
         // apply it to the state
         dynamic e = @event!;
-        dynamic s = _state.State;
+        dynamic s = _aggregate.State.Aggregate!;
         s.Apply(e);
 
         // update the version
-        _state.State.Version += 1;
+        _aggregate.State.Version = newVersion;
 
         // add it to the outbox ... we can loop through a list of providers and add one per provider
         // we pass the event and the version, so that the consumer can handle ordering / deduplication
@@ -71,7 +96,7 @@ public abstract class JournaledGrainBase<TModel, TEvent> : DurableGrain, IJourna
         {
             _outbox.Enqueue(new OutboxEnvelope<TEvent>(
                 @event,
-                _state.State.Version,
+                newVersion,
                 recipient,
                 OutboxState.Pending
             ));
@@ -81,15 +106,8 @@ public abstract class JournaledGrainBase<TModel, TEvent> : DurableGrain, IJourna
         await WriteStateAsync();
 
         // Initialize background processing of the outbox
-        //_ = InitializeOutboxProcessing();
-        // await this.AsReference<IJournaledGrain>().ProcessOutbox();
         _outboxTimer?.Change(TimeSpan.FromSeconds(0), Timeout.InfiniteTimeSpan);
     }
-
-    /*private async Task InitializeOutboxProcessing()
-    {
-        await this.AsReference<IJournaledGrain>().ProcessOutbox();
-    }*/
 
     public async Task ProcessOutbox()
     {
@@ -97,7 +115,7 @@ public abstract class JournaledGrainBase<TModel, TEvent> : DurableGrain, IJourna
 
         var failedItems = new List<OutboxEnvelope<TEvent>>();
 
-        while(_outbox.TryDequeue(out var item))
+        while (_outbox.TryDequeue(out var item))
         {
             try
             {
@@ -113,7 +131,7 @@ public abstract class JournaledGrainBase<TModel, TEvent> : DurableGrain, IJourna
                     throw new InvalidOperationException($"No recipient registered for destination: {item.Destination}");
                 }
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
                 Console.WriteLine("[{0}] Failed to handle event {1} for recipient {2}", this.GetPrimaryKeyString(), item.Event.GetType().Name, item.Destination);
                 // Console.WriteLine(ex.Message + "\r\n" + ex.StackTrace);
@@ -123,16 +141,20 @@ public abstract class JournaledGrainBase<TModel, TEvent> : DurableGrain, IJourna
             }
         }
 
-        foreach(var item in failedItems)
+        foreach (var item in failedItems)
         {
             _outbox.Enqueue(item);
-            
+
         }
 
         await WriteStateAsync();
     }
+    #endregion
 
-    protected TEvent[] Log => _eventLog.ToArray();
+    protected EventEnvelope<TEvent>[] Log => _journal.ToArray();
 
-    protected TModel ConfirmedState => _state.State;
+    protected TModel ConfirmedState => _aggregate.State.Aggregate;
+
+    protected int ConfirmedVersion => _aggregate.State.Version;
+
 }

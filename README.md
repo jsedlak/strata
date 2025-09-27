@@ -18,11 +18,11 @@ Strata is an opinionated Event Sourcing library built for Microsoft Orleans.
 
 ### Build an Aggregate Model
 
-Create an aggregate object that can handle events being applied to it.
+Create an aggregate object that can handle events being applied to it. This will typically represent an aggregate root in your domain model. It can contain objects,
 
 ```csharp
 [GenerateSerializer]
-public class AccountAggregate : IAggregate
+public class AccountAggregate
 {
     public void Apply(BalanceAdjustedEvent @event)
     {
@@ -31,9 +31,6 @@ public class AccountAggregate : IAggregate
 
     [Id(0)]
     public string Id { get; set; } = null!;
-
-    [Id(1)]
-    public int Version { get; set; }
 
     [Id(2)]
     public double Balance { get; set; }
@@ -44,38 +41,11 @@ public class AccountAggregate : IAggregate
 
 Implement a Journaled Grain that converts commands into events.
 
-
 ```csharp
-internal sealed class AccountGrain : 
-    JournaledGrainBase<AccountAggregate, BaseAccountEvent>, 
+internal sealed class AccountGrain :
+    JournaledGrain<AccountAggregate, BaseAccountEvent>,
     IAccountGrain
 {
-
-    private readonly IPersistentState<AccountAggregate> _state;
-
-    public AccountGrain(
-        [FromKeyedServices("log")] IDurableList<BaseAccountEvent> eventLog,
-        [FromKeyedServices("outbox")] IDurableQueue<OutboxEnvelope<BaseAccountEvent>> outbox,
-        [FromKeyedServices("state")] IPersistentState<AccountAggregate> state
-    ) : base(eventLog, outbox, state)
-    {
-        _state = state;
-    }
-
-    public override async Task OnActivateAsync(CancellationToken cancellationToken)
-    {
-        await base.OnActivateAsync(cancellationToken);
-    
-        if(!_state.RecordExists)
-        {
-            _state.State = new();
-            _state.State.Id = this.GetPrimaryKeyString();
-            _state.State.Version = 1;
-
-            await WriteStateAsync();
-        }
-    }
-
     public Task<double> GetBalance() => Task.FromResult(ConfirmedState.Balance);
 
     public async Task Deposit(double amount)
@@ -102,8 +72,15 @@ internal sealed class AccountGrain :
 Register an `IOutboxRecipient<TEvent>` to handle outbox messages in the `OnActivateAsync` method of your grain. This allows you to act on events, connecting other grains or passing the message to a stream or bus.
 
 ```csharp
-RegisterRecipient(nameof(AccountProjection), new AccountProjection(this.GrainFactory));
-
+internal sealed class AccountGrain :
+    JournaledGrain<AccountAggregate, BaseAccountEvent>,
+    IAccountGrain
+{
+    protected override void OnRegisterRecipients()
+    {
+        RegisterRecipient(nameof(AccountProjection), new AccountProjection(this.GrainFactory));
+    }
+}
 
 public sealed class AccountProjection : IOutboxRecipient<BaseAccountEvent>
 {

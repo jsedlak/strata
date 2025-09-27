@@ -1,7 +1,7 @@
 ﻿namespace Strata.Journaling.Tests;
 
 [GenerateSerializer]
-public class AccountAggregate : IAggregate
+public class AccountAggregate
 {
     public void Apply(BalanceAdjustedEvent @event)
     {
@@ -12,8 +12,5 @@ public class AccountAggregate : IAggregate
     public string Id { get; set; } = null!;
 
     [Id(1)]
-    public int Version { get; set; }
-
-    [Id(2)]
     public double Balance { get; set; }
 }

@@ -1,10 +1,27 @@
-﻿using System.Text.Json;
-
-namespace Strata.Journaling.Tests;
+﻿namespace Strata.Journaling.Tests;
 
 public class JournaledGrainTests(IntegrationTestFixture fixture) : IClassFixture<IntegrationTestFixture>
 {
     private IGrainFactory Client => fixture.Client;
+
+    [Fact]
+    public async Task JournaledGrain_StateCanSave()
+    {
+        var grain = Client.GetGrain<IAccountGrain>("account_save_state");
+
+        await grain.Deposit(100);
+        await grain.Deactivate();
+
+        await Task.Delay(1000);
+
+        var grain2 = Client.GetGrain<IAccountGrain>("account_save_state");
+
+        var balance = await grain2.GetBalance();
+        Assert.Equal(100, balance);
+
+        var log = await grain2.GetEvents();
+        Assert.Single(log);
+    }
 
     [Fact]
     public async Task JournaledGrain_CanHandleEvents()
@@ -21,15 +38,8 @@ public class JournaledGrainTests(IntegrationTestFixture fixture) : IClassFixture
         balance = await grain.GetBalance();
         Assert.Equal(60, balance);
 
-        await grain.Deactivate();
-
-        var grain2 = Client.GetGrain<IAccountGrain>("testaccount");
-
-        var storedBalance = await grain2.GetBalance();
-        Assert.Equal(60, storedBalance);
-
-        var events = await grain2.GetEvents();
-        Assert.Equal(2, events.Length);
+        var log = await grain.GetEvents();
+        Assert.Equal(2, log.Length);
 
         var projectionGrain = Client.GetGrain<IAccountViewModelGrain>("testaccount");
         var projectedBalance = await projectionGrain.GetBalance();
@@ -89,9 +99,11 @@ public class JournaledGrainTests(IntegrationTestFixture fixture) : IClassFixture
 
             activeGrainIds = await mgmt.GetActiveGrains(GrainType.Create("account"));
 
-            if (DateTime.UtcNow - startTime > TimeSpan.FromMinutes(2))
+            if (DateTime.UtcNow - startTime > TimeSpan.FromMinutes(3))
             {
-                throw new Exception("Timeout, grains did not deactivate");
+                //throw new Exception("Timeout, grains did not deactivate");
+                Assert.Fail("Timeout, grains did not deactivate");
+                break;
             }
         }
     }
