@@ -1,14 +1,36 @@
-﻿namespace Strata.Journaling.Tests;
+﻿using Microsoft.Extensions.DependencyInjection;
+
+namespace Strata.Journaling.Tests;
 
 internal sealed class AccountViewModelGrain : Grain, IAccountViewModelGrain
 {
-    private double _balance;
-    
-    public Task<double> GetBalance() => Task.FromResult(_balance);
+    private readonly IPersistentState<AccountViewModel> _state;
 
-    public Task UpdateBalance(double newBalance)
+    public AccountViewModelGrain(
+        [FromKeyedServices("state")] IPersistentState<AccountViewModel> state
+    )
     {
-        _balance = newBalance;
-        return Task.CompletedTask;
+        _state = state;
+    }
+
+    public override async Task OnActivateAsync(CancellationToken cancellationToken)
+    {
+        await base.OnActivateAsync(cancellationToken);
+
+        if(!_state.RecordExists)
+        {
+            _state.State = new();
+            await _state.WriteStateAsync();
+        }
+        
+    }
+
+    public Task<double> GetBalance() => Task.FromResult(_state.State.Balance);
+
+    public async Task UpdateBalance(double newBalance)
+    {
+        Console.WriteLine("Receiving balance update for account {0} to {1}", this.GetPrimaryKeyString(), newBalance);
+        _state.State.Balance = newBalance;
+        await _state.WriteStateAsync();
     }
 }

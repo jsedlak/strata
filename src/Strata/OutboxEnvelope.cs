@@ -2,12 +2,9 @@
 
 [GenerateSerializer]
 public class OutboxEnvelope<TEvent>
+    where TEvent : notnull
 {
-    public OutboxEnvelope()
-    {
-    }
-
-    public OutboxEnvelope(TEvent? @event, int version, string destination, OutboxState state)
+    public OutboxEnvelope(TEvent @event, int version, string destination, OutboxState state)
     {
         Event = @event;
         Version = version;

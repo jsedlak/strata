@@ -14,6 +14,9 @@ public sealed class AccountProjection : IOutboxRecipient<BaseAccountEvent>
         if (@event is BalanceAdjustedEvent balanceEvent)
         {
             var accountId = balanceEvent.Id;
+
+            Console.WriteLine("Updating balance for account {0} to {1}", accountId, balanceEvent.Balance);
+
             var viewModelGrain = _grainFactory.GetGrain<IAccountViewModelGrain>(accountId);
             await viewModelGrain.UpdateBalance(balanceEvent.Balance);
         }

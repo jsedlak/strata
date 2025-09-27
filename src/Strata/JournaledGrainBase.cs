@@ -3,8 +3,9 @@ using Orleans.Journaling;
 
 namespace Strata;
 
-public abstract class JournaledGrainBase<TModel, TEvent> : DurableGrain
+public abstract class JournaledGrainBase<TModel, TEvent> : DurableGrain, IJournaledGrain
     where TModel : IAggregate, new()
+    where TEvent : notnull
 {
     private readonly IDurableList<TEvent> _eventLog;
     private readonly IDurableQueue<OutboxEnvelope<TEvent>> _outbox;
@@ -21,6 +22,12 @@ public abstract class JournaledGrainBase<TModel, TEvent> : DurableGrain
         _eventLog = eventLog;
         _outbox = outbox;
         _state = state;
+    }
+
+    public override async Task OnDeactivateAsync(DeactivationReason reason, CancellationToken cancellationToken)
+    {
+        await this.ProcessOutbox();
+        await base.OnDeactivateAsync(reason, cancellationToken);
     }
 
     protected void RegisterRecipient(string key, IOutboxRecipient<TEvent> recipient)
@@ -56,26 +63,53 @@ public abstract class JournaledGrainBase<TModel, TEvent> : DurableGrain
         // Save it in one shot
         await WriteStateAsync();
 
-        // dequeue all outbox items into an array
-        var items = new List<OutboxEnvelope<TEvent>>();
-        while (_outbox.TryDequeue(out var item))
-        {
-            items.Add(item);
-        }
+        // Initialize background processing of the outbox
+        _ = InitializeOutboxProcessing();
+        // await this.AsReference<IJournaledGrain>().ProcessOutbox();
+    }
 
-        // initiate background processing of the outbox ??
-        Parallel.ForEach<OutboxEnvelope<TEvent>>(
-            items,
-            async (item) =>
+    private async Task InitializeOutboxProcessing()
+    {
+        await this.AsReference<IJournaledGrain>().ProcessOutbox();
+    }
+
+    public async Task ProcessOutbox()
+    {
+        var failedItems = new List<OutboxEnvelope<TEvent>>();
+
+        while(_outbox.TryDequeue(out var item))
+        {
+            try
             {
                 if (_outboxRecipients.TryGetValue(item.Destination, out var recipient))
                 {
+                    Console.WriteLine("[{0}] Handling event {1} for recipient {2}", this.GetPrimaryKeyString(), item.Event.GetType().Name, item.Destination);
+
                     await recipient.Handle(item.Version, item.Event);
-                    item.State = OutboxState.Sent;
                     await WriteStateAsync();
                 }
+                else
+                {
+                    throw new InvalidOperationException($"No recipient registered for destination: {item.Destination}");
+                }
             }
-        );
+            catch(Exception ex)
+            {
+                Console.WriteLine("[{0}] Failed to handle event {1} for recipient {2}", this.GetPrimaryKeyString(), item.Event.GetType().Name, item.Destination);
+                // Console.WriteLine(ex.Message + "\r\n" + ex.StackTrace);
+
+                item.State = OutboxState.Failed;
+                failedItems.Add(item);
+            }
+        }
+
+        foreach(var item in failedItems)
+        {
+            _outbox.Enqueue(item);
+            
+        }
+
+        await WriteStateAsync();
     }
 
     protected TEvent[] Log => _eventLog.ToArray();
