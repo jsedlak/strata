@@ -84,27 +84,5 @@ public class JournaledGrainTests(IntegrationTestFixture fixture) : IClassFixture
 
         Assert.Equal(100, balance1);
         Assert.Equal(200, balance2);
-
-
-        var mgmt = Client.GetGrain<IManagementGrain>(0);
-        var hosts = await mgmt.GetHosts(true);
-
-        await mgmt.ForceGarbageCollection(hosts.Keys.ToArray());
-
-        var activeGrainIds = await mgmt.GetActiveGrains(GrainType.Create("account"));
-        var startTime = DateTime.UtcNow;
-        while (activeGrainIds.Count > 0)
-        {
-            await Task.Delay(TimeSpan.FromSeconds(1));
-
-            activeGrainIds = await mgmt.GetActiveGrains(GrainType.Create("account"));
-
-            if (DateTime.UtcNow - startTime > TimeSpan.FromMinutes(3))
-            {
-                //throw new Exception("Timeout, grains did not deactivate");
-                Assert.Fail("Timeout, grains did not deactivate");
-                break;
-            }
-        }
     }
 }

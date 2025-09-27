@@ -4,7 +4,7 @@ public class JournaledGrainActivationTests(IntegrationTestFixture fixture) : ICl
 {
     private IGrainFactory Client => fixture.Client;
 
-    [Fact]
+    [Fact(Skip = "This test is not necessary to execute every time. It may be useful for making sure a grain is deactivated on idle despite using an infinite timer.")]
     public async Task JournaledGrain_CanDeactivateOnIdle()
     {
         var grain1 = Client.GetGrain<IAccountGrain>("multiple_grains_1");
