@@ -3,11 +3,11 @@ using Orleans.Journaling;
 
 namespace Strata.Journaling.Tests;
 
-internal sealed class AccountGrain : 
-    JournaledGrainBase<AccountAggregate, BaseAccountEvent>, 
+[GrainType("account")]
+internal sealed class AccountGrain :
+    JournaledGrainBase<AccountAggregate, BaseAccountEvent>,
     IAccountGrain
 {
-
     private readonly IPersistentState<AccountAggregate> _state;
 
     public AccountGrain(
@@ -22,8 +22,8 @@ internal sealed class AccountGrain :
     public override async Task OnActivateAsync(CancellationToken cancellationToken)
     {
         await base.OnActivateAsync(cancellationToken);
-    
-        if(!_state.RecordExists)
+
+        if (!_state.RecordExists)
         {
             _state.State = new();
             _state.State.Id = this.GetPrimaryKeyString();

@@ -1,5 +1,6 @@
 ﻿using System.Collections.Concurrent;
 using Microsoft.Extensions.DependencyInjection;
+using Orleans.Configuration;
 using Orleans.Journaling;
 using Orleans.TestingHost;
 using Xunit;
@@ -23,6 +24,12 @@ public class IntegrationTestFixture : IAsyncLifetime
         {
             siloBuilder.AddStateMachineStorage();
             siloBuilder.Services.AddSingleton<IStateMachineStorageProvider>(storageProvider);
+
+            // configure a really low idle collection age to test the outbox timer
+            siloBuilder.Services.Configure<GrainCollectionOptions>(options =>
+            {
+                options.CollectionAge = TimeSpan.FromSeconds(61);
+            });
         });
         ConfigureTestCluster(builder);
         Cluster = builder.Build();

@@ -1,4 +1,6 @@
-﻿namespace Strata.Journaling.Tests;
+﻿using System.Text.Json;
+
+namespace Strata.Journaling.Tests;
 
 public class JournaledGrainTests(IntegrationTestFixture fixture) : IClassFixture<IntegrationTestFixture>
 {
@@ -52,7 +54,8 @@ public class JournaledGrainTests(IntegrationTestFixture fixture) : IClassFixture
 
         var projectionGrain = Client.GetGrain<IAccountViewModelGrain>(testId);
 
-        fixture.WaitForAssertion(() =>)
+        await Task.Delay(1000);
+
         double projectedBalance = await projectionGrain.GetBalance();
         Assert.Equal(60, projectedBalance);
     }
@@ -71,5 +74,19 @@ public class JournaledGrainTests(IntegrationTestFixture fixture) : IClassFixture
 
         Assert.Equal(100, balance1);
         Assert.Equal(200, balance2);
+
+
+        var mgmt = Client.GetGrain<IManagementGrain>(0);
+        var hosts = await mgmt.GetHosts(true);
+
+        await mgmt.ForceGarbageCollection(hosts.Keys.ToArray());
+
+        var activeGrainIds = await mgmt.GetActiveGrains(GrainType.Create("account"));
+        while (activeGrainIds.Count > 0)
+        {
+            await Task.Delay(TimeSpan.FromSeconds(1));
+
+            activeGrainIds = await mgmt.GetActiveGrains(GrainType.Create("account"));
+        }
     }
 }

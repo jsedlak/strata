@@ -7,11 +7,17 @@ public abstract class JournaledGrainBase<TModel, TEvent> : DurableGrain, IJourna
     where TModel : IAggregate, new()
     where TEvent : notnull
 {
+    private const long MaxTimeout = 4294967294;
+
+    private static readonly TimeSpan MaxTimeoutSpan = TimeSpan.FromMilliseconds(MaxTimeout);
+
     private readonly IDurableList<TEvent> _eventLog;
     private readonly IDurableQueue<OutboxEnvelope<TEvent>> _outbox;
     private readonly IPersistentState<TModel> _state;
 
     private readonly Dictionary<string, IOutboxRecipient<TEvent>> _outboxRecipients = new();
+
+    private IGrainTimer? _outboxTimer = null;
 
     public JournaledGrainBase(
         [FromKeyedServices("log")] IDurableList<TEvent> eventLog,
@@ -22,6 +28,21 @@ public abstract class JournaledGrainBase<TModel, TEvent> : DurableGrain, IJourna
         _eventLog = eventLog;
         _outbox = outbox;
         _state = state;
+    }
+
+    public override async Task OnActivateAsync(CancellationToken cancellationToken)
+    {
+        await base.OnActivateAsync(cancellationToken);
+        
+        _outboxTimer = this.RegisterGrainTimer(
+            ProcessOutbox,
+            new GrainTimerCreationOptions
+            {
+                DueTime = MaxTimeoutSpan,
+                Period = MaxTimeoutSpan,
+                Interleave = true,
+            }
+        );
     }
 
     public override async Task OnDeactivateAsync(DeactivationReason reason, CancellationToken cancellationToken)
@@ -50,7 +71,7 @@ public abstract class JournaledGrainBase<TModel, TEvent> : DurableGrain, IJourna
 
         // add it to the outbox ... we can loop through a list of providers and add one per provider
         // we pass the event and the version, so that the consumer can handle ordering / deduplication
-        foreach(var recipient in _outboxRecipients.Keys)
+        foreach (var recipient in _outboxRecipients.Keys)
         {
             _outbox.Enqueue(new OutboxEnvelope<TEvent>(
                 @event,
@@ -64,17 +85,20 @@ public abstract class JournaledGrainBase<TModel, TEvent> : DurableGrain, IJourna
         await WriteStateAsync();
 
         // Initialize background processing of the outbox
-        _ = InitializeOutboxProcessing();
+        //_ = InitializeOutboxProcessing();
         // await this.AsReference<IJournaledGrain>().ProcessOutbox();
+        _outboxTimer?.Change(TimeSpan.FromSeconds(0), MaxTimeoutSpan);
     }
 
-    private async Task InitializeOutboxProcessing()
+    /*private async Task InitializeOutboxProcessing()
     {
         await this.AsReference<IJournaledGrain>().ProcessOutbox();
-    }
+    }*/
 
     public async Task ProcessOutbox()
     {
+        _outboxTimer?.Change(MaxTimeoutSpan, MaxTimeoutSpan);
+
         var failedItems = new List<OutboxEnvelope<TEvent>>();
 
         while(_outbox.TryDequeue(out var item))
