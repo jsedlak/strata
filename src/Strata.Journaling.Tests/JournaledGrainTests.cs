@@ -82,11 +82,17 @@ public class JournaledGrainTests(IntegrationTestFixture fixture) : IClassFixture
         await mgmt.ForceGarbageCollection(hosts.Keys.ToArray());
 
         var activeGrainIds = await mgmt.GetActiveGrains(GrainType.Create("account"));
+        var startTime = DateTime.UtcNow;
         while (activeGrainIds.Count > 0)
         {
             await Task.Delay(TimeSpan.FromSeconds(1));
 
             activeGrainIds = await mgmt.GetActiveGrains(GrainType.Create("account"));
+
+            if (DateTime.UtcNow - startTime > TimeSpan.FromMinutes(2))
+            {
+                throw new Exception("Timeout, grains did not deactivate");
+            }
         }
     }
 }

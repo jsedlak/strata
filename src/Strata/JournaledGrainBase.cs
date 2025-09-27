@@ -7,10 +7,6 @@ public abstract class JournaledGrainBase<TModel, TEvent> : DurableGrain, IJourna
     where TModel : IAggregate, new()
     where TEvent : notnull
 {
-    private const long MaxTimeout = 4294967294;
-
-    private static readonly TimeSpan MaxTimeoutSpan = TimeSpan.FromMilliseconds(MaxTimeout);
-
     private readonly IDurableList<TEvent> _eventLog;
     private readonly IDurableQueue<OutboxEnvelope<TEvent>> _outbox;
     private readonly IPersistentState<TModel> _state;
@@ -38,8 +34,8 @@ public abstract class JournaledGrainBase<TModel, TEvent> : DurableGrain, IJourna
             ProcessOutbox,
             new GrainTimerCreationOptions
             {
-                DueTime = MaxTimeoutSpan,
-                Period = MaxTimeoutSpan,
+                DueTime = Timeout.InfiniteTimeSpan,
+                Period = Timeout.InfiniteTimeSpan,
                 Interleave = true,
             }
         );
@@ -87,7 +83,7 @@ public abstract class JournaledGrainBase<TModel, TEvent> : DurableGrain, IJourna
         // Initialize background processing of the outbox
         //_ = InitializeOutboxProcessing();
         // await this.AsReference<IJournaledGrain>().ProcessOutbox();
-        _outboxTimer?.Change(TimeSpan.FromSeconds(0), MaxTimeoutSpan);
+        _outboxTimer?.Change(TimeSpan.FromSeconds(0), Timeout.InfiniteTimeSpan);
     }
 
     /*private async Task InitializeOutboxProcessing()
@@ -97,7 +93,7 @@ public abstract class JournaledGrainBase<TModel, TEvent> : DurableGrain, IJourna
 
     public async Task ProcessOutbox()
     {
-        _outboxTimer?.Change(MaxTimeoutSpan, MaxTimeoutSpan);
+        _outboxTimer?.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
 
         var failedItems = new List<OutboxEnvelope<TEvent>>();
 
