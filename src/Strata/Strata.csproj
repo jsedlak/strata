@@ -22,9 +22,10 @@
 		<PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.2" />
 		<PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.2" />
 		<PackageReference Include="Microsoft.Extensions.Options" Version="9.0.2" />
+		<PackageReference Include="Microsoft.Orleans.Journaling" Version="9.2.1-alpha.1" />
 		<PackageReference Include="System.Memory.Data" Version="9.0.2" />
-		<PackageReference Include="Microsoft.Orleans.Sdk" Version="9.1.2" />
-		<PackageReference Include="Microsoft.Orleans.Streaming" Version="9.1.2" />
+		<PackageReference Include="Microsoft.Orleans.Sdk" Version="9.2.1" />
+		<PackageReference Include="Microsoft.Orleans.Streaming" Version="9.2.1" />
 	</ItemGroup>
 
 	<ItemGroup>

@@ -2,7 +2,15 @@
 
 A Projection is a process by which data from an Event is used to alter the View Model or downstream system. In the simplest way, a Projection is the ability to execute code asynchronously as the result of an Event occuring.
 
-For any grain that utilizes the Strata base, either `StreamingEventSourcedGrain` or `EventSourcedGrain` there is the ability to opt-in for automatic projections.
+There are two flavors of Projections in the Strata Framework. **Host Managed** and **Projection Managed**.
+
+## Host Managed Projections
+
+Host Managed Projections use Orleans' OneWay calls to initiate application of any number of projections on a well-known Grain type, the `ProjectionGrain`, from the source, a Domain Model Grain that inherits `StreamingEventSourcedGrain` or `EventSourcedGrain`.
+
+To register your projections, use the extension method, `RegisterProjection<T>` during the `OnActivateAsync` method of your Domain Model Grain.
+
+### Example
 
 Consider the `Account` model as follows.
 
@@ -42,7 +50,7 @@ public sealed class AccountViewModel
 
 In the case of a view model, it is a POCO that represents the latest state of the Account in a way that is meant for a specific front-end use case. There may be many such view models, each with its own set of properties and use cases.
 
-## Adding a Projection
+#### Adding a Projection
 
 To support keeping this View Model up-to-date, we add a Projection class.
 
@@ -67,9 +75,10 @@ We then register this event with our Domain Model Grain.
 
 ```csharp
 internal sealed class AccountGrain :
-    EventSourcedGrain<Account, BaseAccountEvent> {
-
-    public override Task OnActivateAsync(CancellationToken cancellationToken)
+    EventSourcedGrain<Account, BaseAccountEvent>
+{
+    public override Task OnActivateAsync(
+        CancellationToken cancellationToken)
     {
         this.RegisterProjection<AccountViewModelProjection>();
 
@@ -78,30 +87,156 @@ internal sealed class AccountGrain :
 }
 ```
 
-This registers an event handler that will be called whenever the `RaiseEvent` methods are called, receiving the event(s) as a result. The internal mechanism of Strata's EventSourcedGrain will need to be updated to support such event handler registrations, via a protected `RegisterEventHandler` method.
+This registers an event handler using `RegisterEventHandler` with a typed callback. This in turn calls the ProjectionGrain to handle the call.
 
-## Projection Grains
+```csharp
+public static class GrainExtensions
+{
+    public static void RegisterProjection<TProjection>(
+        this EventSourcedGrain grain
+    ) where TProjection : class
+    {
+        // Get all IProjection<TEvent> that the TProjection implements
+        var eventTypes = GetAllEventTypes<TProjection>();
+
+        foreach(var eventType in eventTypes)
+        {
+            grain.RegisterEventHandler(
+                eventType,
+                async (@event) => {
+                    // Use Orleans' built-in grain factory with proper typing
+                    var projectionGrain = grain.GrainFactory.GetGrain<IProjectionGrain>(
+                        $"{grain.GetGrainId()}/{typeof(TProjection).Name}");
+
+                    // Use generic method to maintain type safety
+                    await projectionGrain.ApplyProjection(@event, typeof(TProjection).Name);
+                }
+            );
+        }
+    }
+}
+```
+
+This approach provides:
+
+- **Type Safety**: Events are passed as strongly-typed objects, not strings
+- **Better Performance**: Uses Orleans' built-in grain factory instead of ClusterClient
+- **Cleaner API**: Generic method signature maintains compile-time type checking
+- **Proper Serialization**: Orleans handles serialization automatically for typed objects
+
+### Projection Grain
 
 For each type that is passed into the `RegisterProjection` method, a `ProjectionGrain` is spun up. The `ProjectionGrain` does a few things to help offload the work from the Domain Model Grain (`AccountGrain`).
 
 1. This Grain is identified by the type of projection via a compound string key based on your grain's ID: "{grain id}/{projection type}"
 2. The Grain implements `IProjectionGrain` and uses an internal queue mechanism to ensure that work is ordered.
 3. When this Grain's `Apply` method is called, the event is queued internally. It then uses a worker thread to manage processing of the queue. If the internal worker thread is not running, it is spun up immediately.
-4. When the internal thread is initialized, the queue is cleared and all work is processed for that instance of the thread.
-5. When the internal worker task is completed, the queue is checked and if any new work is present, the process starts again.
+4. The `Apply` method is marked `[OneWay]`
+5. When the internal thread is initialized, the queue is cleared and all work is processed for that instance of the thread.
+6. When the internal worker task is completed, the queue is checked and if any new work is present, the process starts again.
 
-### Reference: IProjectionGrain
+#### Reference: IProjectionGrain
 
 ```csharp
 public interface IProjectionGrain : IGrainWithStringKey
 {
-    Task Apply(object @event);
+    [OneWay]
+    Task ApplyProjection<TEvent>(TEvent @event, string projectionType)
+        where TEvent : class;
 }
 ```
 
-# Relevant Classes
+#### Async Processing Pattern
+
+To ensure projections don't block the main event sourcing flow, the `EventSourcedGrain` processes projections asynchronously:
+
+```csharp
+protected virtual async Task Raise(TEventBase @event)
+{
+    _logger?.LogDebug("Raising event of type {EventType}", @event.GetType().Name);
+
+    // Process synchronous event handlers first
+    await ProcessEventHandlers(@event);
+
+    // Submit to event log
+    _eventLog.Submit(@event);
+
+    // Process projections asynchronously (fire-and-forget)
+    _ = Task.Run(async () => await ProcessProjectionsAsync(@event));
+
+    if (_saveOnRaise)
+    {
+        await _eventLog.WaitForConfirmation();
+    }
+}
+
+private async Task ProcessProjectionsAsync(TEventBase @event)
+{
+    try
+    {
+        var projectionTasks = GetRegisteredProjections(@event.GetType())
+            .Select(projectionType => ProcessProjectionAsync(projectionType, @event));
+
+        await Task.WhenAll(projectionTasks);
+    }
+    catch (Exception ex)
+    {
+        _logger?.LogError(ex, "Error processing projections for event {EventType}", @event.GetType().Name);
+    }
+}
+```
+
+This approach ensures:
+
+- **Non-blocking**: Main event sourcing flow continues without waiting for projections
+- **Parallel Processing**: Multiple projections can process the same event concurrently
+- **Error Isolation**: Projection failures don't affect the main event processing
+- **Performance**: Better overall throughput for high-volume event processing
+
+#### Relevant Classes
 
 - Strata.Projections.IProjectionGrain
 - Strata.Projections.ProjectionGrain
 - Strata.Projections.IProjection<TEvent>
 - Strata.Projections.GrainExtensions
+
+## Projection Managed Grains
+
+For those who wish to use an Orleans Stream to provide asynchronous communication between the Domain Model (Host) Grain and the Projection Grain, the Projection Managed Grain option offers built-in capabilities for processing events.
+
+Simply create a Grain that inherits the `EventRecipientGrain` type, and implements any number of the `IProjection<TEvent>` interfaces, one for each event you wish to handle.
+
+The `EventRecipientGrain` will utilize the stream subscription, loop through the available `IProjection<TEvent>` implementations and call each one as necessary.
+
+For this to work, there needs to be a coupling in the Stream Source and Stream Subscription, so it's best to use the `StreamingEventSourcedGrain` type and mark the Recipient Grain with an implicit stream subscription that matches.
+
+```csharp
+// end developer implements this grain
+[ImplicitStreamSubscription(Streams.AccountStream)]
+internal sealed class MyProjectionGrain :
+    EventRecipientGrain,
+    IMyProjectionGrain,
+    IProjection<AmountAddedEvent>,
+    IProjection<AmountRemovedEvent>
+{
+    public async Task Handle(AmountAddedEvent @event)
+    {
+        // ... do something with the event
+        // Projections are processed asynchronously via streams
+    }
+
+    public async Task Handle(AmountRemovedEvent @event)
+    {
+        // ... do something with the event
+        // Projections are processed asynchronously via streams
+    }
+}
+```
+
+The `EventRecipientGrain` base class provides:
+
+- **Automatic Stream Subscription**: Handles Orleans stream subscription lifecycle
+- **Type-Safe Event Routing**: Uses reflection to route events to appropriate handler methods
+- **Error Handling**: Built-in error handling and logging for projection failures
+- **Async Processing**: All projection handlers are processed asynchronously
+- **State Management**: Optional support for maintaining projection state
