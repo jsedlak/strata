@@ -1,6 +1,8 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
+using Strata.Journaling.Tests.JournalingTests.GrainModel;
+using Strata.Journaling.Tests.JournalingTests.Model;
 
-namespace Strata.Journaling.Tests;
+namespace Strata.Journaling.Tests.JournalingTests.Grains;
 
 internal sealed class AccountViewModelGrain : Grain, IAccountViewModelGrain
 {

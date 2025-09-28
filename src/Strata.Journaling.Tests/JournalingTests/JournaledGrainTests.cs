@@ -1,6 +1,8 @@
-﻿namespace Strata.Journaling.Tests;
+﻿using Strata.Journaling.Tests.JournalingTests.GrainModel;
 
-public class JournaledGrainTests(IntegrationTestFixture fixture) : IClassFixture<IntegrationTestFixture>
+namespace Strata.Journaling.Tests.JournalingTests;
+
+public class JournaledGrainTests(JournalingTestFixture fixture) : IClassFixture<JournalingTestFixture>
 {
     private IGrainFactory Client => fixture.Client;
 

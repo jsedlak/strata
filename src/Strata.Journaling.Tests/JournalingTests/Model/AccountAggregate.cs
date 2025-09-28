@@ -1,4 +1,6 @@
-﻿namespace Strata.Journaling.Tests;
+﻿using Strata.Journaling.Tests.JournalingTests.Events;
+
+namespace Strata.Journaling.Tests.JournalingTests.Model;
 
 [GenerateSerializer]
 public class AccountAggregate

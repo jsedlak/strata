@@ -1,4 +1,4 @@
-﻿namespace Strata.Journaling.Tests;
+﻿namespace Strata.Journaling.Tests.JournalingTests.GrainModel;
 
 public interface IAccountViewModelGrain : IGrainWithStringKey
 {

@@ -1,4 +1,7 @@
-﻿namespace Strata.Journaling.Tests;
+﻿using Strata.Journaling.Tests.JournalingTests.Events;
+using Strata.Journaling.Tests.JournalingTests.GrainModel;
+
+namespace Strata.Journaling.Tests.JournalingTests.Projections;
 
 public sealed class AccountProjection : IOutboxRecipient<BaseAccountEvent>
 {

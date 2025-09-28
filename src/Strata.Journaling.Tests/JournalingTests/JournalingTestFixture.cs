@@ -10,12 +10,12 @@ namespace Strata.Journaling.Tests;
 /// <summary>
 /// Base class for journaling tests with common setup using InProcessTestCluster
 /// </summary>
-public class IntegrationTestFixture : IAsyncLifetime
+public class JournalingTestFixture : IAsyncLifetime
 {
     public InProcessTestCluster Cluster { get; }
     public IClusterClient Client => Cluster.Client;
 
-    public IntegrationTestFixture()
+    public JournalingTestFixture()
     {
         var builder = new InProcessTestClusterBuilder();
         var storageProvider = new VolatileStateMachineStorageProvider();

@@ -1,4 +1,4 @@
-﻿namespace Strata.Journaling.Tests;
+﻿namespace Strata.Journaling.Tests.JournalingTests.Events;
 
 [GenerateSerializer]
 public abstract class BaseAccountEvent

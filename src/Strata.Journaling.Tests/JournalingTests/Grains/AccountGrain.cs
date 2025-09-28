@@ -1,4 +1,9 @@
-﻿namespace Strata.Journaling.Tests;
+﻿using Strata.Journaling.Tests.JournalingTests.Events;
+using Strata.Journaling.Tests.JournalingTests.GrainModel;
+using Strata.Journaling.Tests.JournalingTests.Model;
+using Strata.Journaling.Tests.JournalingTests.Projections;
+
+namespace Strata.Journaling.Tests.JournalingTests.Grains;
 
 [GrainType("account")]
 internal sealed class AccountGrain :
@@ -7,7 +12,10 @@ internal sealed class AccountGrain :
 {
     protected override void OnRegisterRecipients()
     {
-        RegisterRecipient(nameof(AccountProjection), new AccountProjection(this.GrainFactory));
+        RegisterRecipient(
+            nameof(AccountProjection),
+            new AccountProjection(this.GrainFactory)
+        );
     }
 
     public ValueTask Deactivate()
