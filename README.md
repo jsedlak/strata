@@ -1,7 +1,5 @@
 ![Strata Logo](img/strata-logo.png)
 
-# Strata
-
 Strata is an opinionated Event Sourcing library built for Microsoft Orleans.
 
 ## Goals
@@ -14,9 +12,9 @@ Strata is an opinionated Event Sourcing library built for Microsoft Orleans.
 - 🏁 Retry, Replay, and Dry-Run Capabilities
 - 📨 OOB Recipients: Direct Grain Calls, Orleans Streams, Recipient Handling
 
-## Examples
+# Event Sourcing
 
-### Build an Aggregate Model
+## Build an Aggregate Model
 
 Create an aggregate object that can handle events being applied to it. This will typically represent an aggregate root in your domain model. It can contain objects,
 
@@ -37,7 +35,7 @@ public class AccountAggregate
 }
 ```
 
-### Build an Aggregate Grain
+## Build an Aggregate Grain
 
 Implement a Journaled Grain that converts commands into events.
 
@@ -67,7 +65,7 @@ internal sealed class AccountGrain :
 }
 ```
 
-### Handle Outbox Messages
+## Handle Outbox Messages
 
 Register an `IOutboxRecipient<TEvent>` to handle outbox messages in the `OnActivateAsync` method of your grain. This allows you to act on events, connecting other grains or passing the message to a stream or bus.
 
@@ -101,4 +99,107 @@ public sealed class AccountProjection : IOutboxRecipient<BaseAccountEvent>
         }
     }
 }
+```
+
+# Sidecars
+
+Strata provides a **Sidecar** pattern that allows you to attach auxiliary grains to primary grains for cross-cutting concerns like monitoring, logging, data collection, or background processing. Sidecars are automatically managed by the framework and can be enabled or disabled dynamically.
+
+## Key Concepts
+
+- **Sidecar Grain**: A grain that implements `ISidecarGrain` and provides auxiliary functionality
+- **Host Grain**: A grain that implements `ISidecarHost<TSidecar>` to indicate it supports a specific sidecar
+- **Lifecycle Management**: Sidecars are automatically activated when their host grain activates (if enabled)
+- **State Management**: Each sidecar has persistent state to track whether it's enabled or disabled
+
+## Creating a Sidecar Grain
+
+Implement the `ISidecarGrain` interface to create a sidecar:
+
+```csharp
+[GrainType("user-cdp")]
+public class UserCdpGrain : Grain, IUserCdpGrain
+{
+    public async Task InitializeSidecar()
+    {
+        // Perform sidecar initialization logic
+        // Set reminders, collect data, establish connections, etc.
+
+        var userGrain = GrainFactory.GetGrain<IUserGrain>(
+            this.GetPrimaryKeyString()
+        );
+
+        await userGrain.SetReferenceId(Guid.NewGuid().ToString());
+
+        // Sidecars can control their own lifecycle
+        await userGrain.DisableSidecar<IUserCdpGrain>();
+    }
+}
+
+public interface IUserCdpGrain : IGrainWithStringKey, ISidecarGrain
+{
+    // Additional sidecar-specific methods can be added here
+}
+```
+
+## Creating a Host Grain
+
+Mark your grain as a sidecar host by implementing `ISidecarHost<TSidecar>`:
+
+```csharp
+[GrainType("user")]
+public class UserGrain : Grain, IUserGrain, ISidecarHost<IUserCdpGrain>
+{
+    private readonly IPersistentState<UserData> _state;
+
+    public UserGrain([FromKeyedServices("state")] IPersistentState<UserData> state)
+    {
+        _state = state;
+    }
+
+    public async ValueTask SetReferenceId(string referenceId)
+    {
+        _state.State.ReferenceId = referenceId;
+        await _state.WriteStateAsync();
+    }
+
+    // Other grain methods...
+}
+
+public interface IUserGrain : IGrainWithStringKey
+{
+    ValueTask SetReferenceId(string referenceId);
+    // Other methods...
+}
+```
+
+## Sidecar Lifecycle
+
+1. **Activation**: When a host grain activates, the framework checks if any sidecars are enabled
+2. **Initialization**: If enabled, the sidecar grain is retrieved and `InitializeSidecar()` is called
+3. **Runtime**: Sidecars operate independently but can interact with their host grain
+4. **Control**: Sidecars can be enabled/disabled dynamically using extension methods
+
+## Controlling Sidecars
+
+Use the provided extension methods to control sidecar state:
+
+```csharp
+// Enable a sidecar
+await userGrain.EnableSidecar<IUserCdpGrain>();
+
+// Disable a sidecar
+await userGrain.DisableSidecar<IUserCdpGrain>();
+```
+
+## Setup and Configuration
+
+Add sidecar support to your Orleans silo:
+
+```csharp
+builder.ConfigureSilo((options, siloBuilder) =>
+{
+    siloBuilder.AddSidecars();
+    // Other configuration...
+});
 ```
