@@ -1,9 +1,9 @@
-namespace Strata.Sidecars;
+//namespace Strata.Sidecars;
 
-public interface ISidecarControlExtension : IGrainExtension
-{
-    Task EnableSidecar();
+//public interface ISidecarControlExtension : IGrainExtension
+//{
+//    Task EnableSidecar();
 
-    Task DisableSidecar();
-}
+//    Task DisableSidecar();
+//}
 

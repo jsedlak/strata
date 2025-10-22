@@ -1,8 +1,8 @@
-using Strata.Sidecars;
+//using Strata.Sidecars;
 
-namespace Strata.Journaling.Tests.SidecarTests.GrainModel;
+//namespace Strata.Journaling.Tests.SidecarTests.GrainModel;
 
-public interface IUserCdpGrain : IGrainWithStringKey, ISidecarGrain
-{
+//public interface IUserCdpGrain : IGrainWithStringKey, ISidecarGrain
+//{
 
-}
+//}

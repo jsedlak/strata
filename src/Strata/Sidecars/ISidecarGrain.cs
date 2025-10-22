@@ -1,7 +1,7 @@
-namespace Strata.Sidecars;
+//namespace Strata.Sidecars;
 
-public interface ISidecarGrain : IGrain
-{
-    Task InitializeSidecar();
-}
+//public interface ISidecarGrain : IGrain
+//{
+//    Task InitializeSidecar();
+//}
 

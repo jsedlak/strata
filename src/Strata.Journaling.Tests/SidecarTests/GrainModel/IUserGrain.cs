@@ -1,12 +1,12 @@
-using Strata.Journaling.Tests.SidecarTests.Model;
+//using Strata.Journaling.Tests.SidecarTests.Model;
 
-namespace Strata.Journaling.Tests.SidecarTests.GrainModel;
+//namespace Strata.Journaling.Tests.SidecarTests.GrainModel;
 
-public interface IUserGrain : IGrainWithStringKey
-{
-    Task<UserData> GetData();
+//public interface IUserGrain : IGrainWithStringKey
+//{
+//    Task<UserData> GetData();
 
-    ValueTask SetName(string name);
+//    ValueTask SetName(string name);
 
-    ValueTask SetReferenceId(string referenceId);
-}
+//    ValueTask SetReferenceId(string referenceId);
+//}

@@ -1,7 +1,7 @@
-namespace Strata.Sidecars;
+//namespace Strata.Sidecars;
 
-public interface ISidecarHost<TSidecar> : IGrain
-    where TSidecar : class, ISidecarGrain
-{
-}
+//public interface ISidecarHost<TSidecar> : IGrain
+//    where TSidecar : class, ISidecarGrain
+//{
+//}
 
