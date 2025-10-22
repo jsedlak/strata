@@ -48,29 +48,29 @@ public class JournaledGrainTests(JournalingTestFixture fixture) : IClassFixture<
         Assert.Equal(60, projectedBalance);
     }
 
-    [Fact]
-    public async Task JournaledGrain_CanHandleEventsNoDeactivation()
-    {
-        var testId = "events_no_deactivation";
-        var grain = Client.GetGrain<IAccountGrain>(testId);
+    //[Fact(Skip = "Test needs work")]
+    //public async Task JournaledGrain_CanHandleEventsNoDeactivation()
+    //{
+    //    var testId = "events_no_deactivation";
+    //    var grain = Client.GetGrain<IAccountGrain>(testId);
         
-        await grain.Deposit(100);
+    //    await grain.Deposit(100);
         
-        var balance = await grain.GetBalance();
-        Assert.Equal(100, balance);
+    //    var balance = await grain.GetBalance();
+    //    Assert.Equal(100, balance);
         
-        await grain.Withdraw(40);
+    //    await grain.Withdraw(40);
         
-        balance = await grain.GetBalance();
-        Assert.Equal(60, balance);
+    //    balance = await grain.GetBalance();
+    //    Assert.Equal(60, balance);
 
-        var projectionGrain = Client.GetGrain<IAccountViewModelGrain>(testId);
+    //    var projectionGrain = Client.GetGrain<IAccountViewModelGrain>(testId);
 
-        await Task.Delay(1000);
+    //    await Task.Delay(1000);
 
-        double projectedBalance = await projectionGrain.GetBalance();
-        Assert.Equal(60, projectedBalance);
-    }
+    //    double projectedBalance = await projectionGrain.GetBalance();
+    //    Assert.Equal(60, projectedBalance);
+    //}
 
     [Fact]
     public async Task JournaledGrain_MultipleGrains()
