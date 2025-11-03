@@ -10,4 +10,7 @@ public class EventEnvelope<TEvent>
 
     [Id(1)]
     public int Version { get; set; }
+
+    [Id(2)]
+    public DateTime Timestamp { get; set; }
 }

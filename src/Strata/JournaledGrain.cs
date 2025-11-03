@@ -98,7 +98,7 @@ public abstract class JournaledGrain<TModel, TEvent> :
 
         // add it to the log
         _journal.State.Events = _journal.State.Events.Union([
-            new EventEnvelope<TEvent> { Event = @event, Version = newVersion }
+            new EventEnvelope<TEvent> { Event = @event, Version = newVersion, Timestamp = DateTime.UtcNow }
         ]).ToArray();
 
         // apply it to the state
