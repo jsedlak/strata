@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+﻿using System.Collections.Concurrent;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Orleans.Journaling;
 
@@ -20,7 +21,7 @@ public abstract class JournaledGrain<TModel, TEvent> :
     private ILogger<IJournaledGrain> _logger = null!;
 
     //private Task? _outboxProcessingTask = null;
-    private List<Task> _backgroundTasks = new();
+    // private ConcurrentBag<Task> _backgroundTasks = new();
 
 
     #region Lifecycle
@@ -65,7 +66,7 @@ public abstract class JournaledGrain<TModel, TEvent> :
     private async Task OnDestroyState(CancellationToken cancellationToken)
     {
         /* try to process the outbox */
-        if(_outbox.Count < 0)
+        if(_outbox is { Count: > 0 })
         {
             _logger.LogInformation("Registering reminder for outbox processing.");
             await this.RegisterOrUpdateReminder(
@@ -124,7 +125,7 @@ public abstract class JournaledGrain<TModel, TEvent> :
             var itemsToProcess = items.ToArray();
             var newProcessingTask = ProcessOutboxInBackground(itemsToProcess);
 
-            _backgroundTasks.Add(newProcessingTask);
+            // _backgroundTasks.Add(newProcessingTask);
 
             return newProcessingTask;
         }

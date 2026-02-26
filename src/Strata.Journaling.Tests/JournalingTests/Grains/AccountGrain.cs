@@ -1,4 +1,5 @@
-﻿using Strata.Journaling.Tests.JournalingTests.Events;
+﻿using Microsoft.Extensions.Logging;
+using Strata.Journaling.Tests.JournalingTests.Events;
 using Strata.Journaling.Tests.JournalingTests.GrainModel;
 using Strata.Journaling.Tests.JournalingTests.Model;
 using Strata.Journaling.Tests.JournalingTests.Projections;
@@ -10,11 +11,18 @@ internal sealed class AccountGrain :
     JournaledGrain<AccountAggregate, BaseAccountEvent>,
     IAccountGrain
 {
+    private readonly ILogger<IAccountGrain> _logger;
+
+    public AccountGrain(ILogger<IAccountGrain> logger)
+    {
+        _logger = logger;
+    }
+
     protected override void OnRegisterRecipients()
     {
         RegisterRecipient(
             nameof(AccountProjection),
-            new AccountProjection(this.GrainFactory)
+            new AccountProjection(this.GrainFactory, _logger)
         );
     }
 
@@ -27,13 +35,13 @@ internal sealed class AccountGrain :
     public override async Task OnActivateAsync(CancellationToken cancellationToken)
     {
         await base.OnActivateAsync(cancellationToken);
-        Console.WriteLine("[{0}] OnActivateAsync", this.GetPrimaryKeyString());
+        _logger.LogInformation("[{0}] OnActivateAsync", this.GetPrimaryKeyString());
     }
 
     public override async Task OnDeactivateAsync(DeactivationReason reason, CancellationToken cancellationToken)
     {
         await base.OnDeactivateAsync(reason, cancellationToken);
-        Console.WriteLine("[{0}] OnDeactivateAsync", this.GetPrimaryKeyString());
+        _logger.LogInformation("[{0}] OnDeactivateAsync", this.GetPrimaryKeyString());
     }
 
     public Task<BaseAccountEvent[]> GetEvents() => Task.FromResult(Log.Select(e => e.Event).ToArray());
