@@ -4,6 +4,4 @@ namespace Strata;
 
 public interface IJournaledGrain 
 {
-    [AlwaysInterleave]
-    Task ProcessOutbox();
 }
