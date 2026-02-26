@@ -1,5 +1,6 @@
 ﻿using System.Collections.Concurrent;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Orleans.Configuration;
 using Orleans.Journaling;
 using Orleans.TestingHost;
@@ -20,8 +21,19 @@ public class JournalingTestFixture : IAsyncLifetime
         var builder = new InProcessTestClusterBuilder();
         var storageProvider = new VolatileStateMachineStorageProvider();
 
+        static void ConfigureConsoleLogging(ILoggingBuilder logging)
+        {
+            logging.AddSimpleConsole(options =>
+            {
+                options.SingleLine = true;
+                options.TimestampFormat = "HH:mm:ss ";
+            });
+            logging.SetMinimumLevel(LogLevel.Information);
+        }
+
         builder.ConfigureSilo((options, siloBuilder) =>
         {
+            siloBuilder.ConfigureLogging(ConfigureConsoleLogging);
             siloBuilder.AddStateMachineStorage();
             siloBuilder.Services.AddSingleton<IStateMachineStorageProvider>(storageProvider);
 
@@ -31,6 +43,7 @@ public class JournalingTestFixture : IAsyncLifetime
                 options.CollectionAge = TimeSpan.FromSeconds(61);
             });
         });
+
         ConfigureTestCluster(builder);
         Cluster = builder.Build();
     }

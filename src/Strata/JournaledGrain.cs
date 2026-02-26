@@ -19,7 +19,8 @@ public abstract class JournaledGrain<TModel, TEvent> :
 
     private ILogger<IJournaledGrain> _logger = null!;
 
-    private Task? _outboxProcessingTask = null;
+    //private Task? _outboxProcessingTask = null;
+    private List<Task> _backgroundTasks = new();
 
 
     #region Lifecycle
@@ -87,7 +88,7 @@ public abstract class JournaledGrain<TModel, TEvent> :
                 await this.UnregisterReminder(reminder);
             }
 
-            await ProcessOutboxInBackground();
+            await TryProcessOutbox();
         }
     }
     #endregion
@@ -109,22 +110,41 @@ public abstract class JournaledGrain<TModel, TEvent> :
         }
     }
     
-    protected Task? ProcessOutbox() 
+    protected Task ProcessOutbox() 
     {
-        if(_outboxProcessingTask is not { IsCompleted: true })
+        if(_outbox is { Count: > 0 })
         {
-            _logger.LogInformation("Starting outbox processing task.");
-            _outboxProcessingTask = Task.Factory.StartNew(ProcessOutboxInBackground);
-        }
-        else
-        {
-            _logger.LogInformation("Outbox is empty, no processing needed.");
+            _logger.LogInformation("Outbox has {0} items pending, starting processing.", _outbox.Count);
+            List<OutboxEnvelope<TEvent>> items = new();
+            while (_outbox.TryDequeue(out var item))
+            {
+                items.Add(item);
+            }
+
+            var itemsToProcess = items.ToArray();
+            var newProcessingTask = ProcessOutboxInBackground(itemsToProcess);
+
+            _backgroundTasks.Add(newProcessingTask);
+
+            return newProcessingTask;
         }
 
-        return _outboxProcessingTask;
+        return Task.CompletedTask;
+
+        //if(true || _outboxProcessingTask is not { IsCompleted: true })
+        //{
+        //    _logger.LogInformation("Starting outbox processing task.");
+        //    _outboxProcessingTask = Task.Factory.StartNew(ProcessOutboxInBackground);
+        //}
+        //else
+        //{
+        //    _logger.LogInformation("Outbox is empty, no processing needed.");
+        //}
+
+        //return _outboxProcessingTask;
     }
 
-    private async Task ProcessOutboxInBackground()
+    private async Task ProcessOutboxInBackground(IEnumerable<OutboxEnvelope<TEvent>> items)
     {
         // It's polite to yield immediately, since we're starting background work.
         await Task.CompletedTask.ConfigureAwait(ConfigureAwaitOptions.ForceYielding | ConfigureAwaitOptions.ContinueOnCapturedContext);
@@ -132,7 +152,7 @@ public abstract class JournaledGrain<TModel, TEvent> :
         // store the failed items in a list to requeue
         var failedItems = new List<OutboxEnvelope<TEvent>>();
 
-        while (_outbox.TryDequeue(out var item))
+        foreach (var item in items)
         {
             try
             {
