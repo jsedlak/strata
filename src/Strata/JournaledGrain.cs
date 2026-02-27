@@ -20,8 +20,8 @@ public abstract class JournaledGrain<TModel, TEvent> :
 
     private ILogger<IJournaledGrain> _logger = null!;
 
-    //private Task? _outboxProcessingTask = null;
-    // private ConcurrentBag<Task> _backgroundTasks = new();
+    private List<Task> _backgroundTasks = new();
+    private readonly CancellationTokenSource _shutdownCancellationSource = new();
 
 
     #region Lifecycle
@@ -65,6 +65,13 @@ public abstract class JournaledGrain<TModel, TEvent> :
 
     private async Task OnDestroyState(CancellationToken cancellationToken)
     {
+        _shutdownCancellationSource.Cancel();
+
+        if(_backgroundTasks is {Count : > 0})
+        {
+            Task.WaitAll(_backgroundTasks.ToArray());
+        }
+
         /* try to process the outbox */
         if(_outbox is { Count: > 0 })
         {
@@ -82,14 +89,14 @@ public abstract class JournaledGrain<TModel, TEvent> :
         if(reminderName == OutboxCleanupReminderName)
         {
             _logger.LogInformation("Received reminder for outbox cleanup.");
-            
+
+            await TryProcessOutbox();
+
             var reminder = await this.GetReminder(OutboxCleanupReminderName);
             if(reminder is not null)
             {
                 await this.UnregisterReminder(reminder);
             }
-
-            await TryProcessOutbox();
         }
     }
     #endregion
@@ -113,6 +120,11 @@ public abstract class JournaledGrain<TModel, TEvent> :
     
     protected Task ProcessOutbox() 
     {
+        if(_shutdownCancellationSource.IsCancellationRequested)
+        {
+            return Task.CompletedTask;
+        }
+
         if(_outbox is { Count: > 0 })
         {
             _logger.LogInformation("Outbox has {0} items pending, starting processing.", _outbox.Count);
@@ -125,24 +137,12 @@ public abstract class JournaledGrain<TModel, TEvent> :
             var itemsToProcess = items.ToArray();
             var newProcessingTask = ProcessOutboxInBackground(itemsToProcess);
 
-            // _backgroundTasks.Add(newProcessingTask);
+             _backgroundTasks.Add(newProcessingTask);
 
             return newProcessingTask;
         }
 
         return Task.CompletedTask;
-
-        //if(true || _outboxProcessingTask is not { IsCompleted: true })
-        //{
-        //    _logger.LogInformation("Starting outbox processing task.");
-        //    _outboxProcessingTask = Task.Factory.StartNew(ProcessOutboxInBackground);
-        //}
-        //else
-        //{
-        //    _logger.LogInformation("Outbox is empty, no processing needed.");
-        //}
-
-        //return _outboxProcessingTask;
     }
 
     private async Task ProcessOutboxInBackground(IEnumerable<OutboxEnvelope<TEvent>> items)
