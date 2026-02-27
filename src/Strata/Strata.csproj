@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
 		<TargetFramework>net10.0</TargetFramework>
@@ -15,7 +15,7 @@
 		<PackageTags>orleans;cqrs;event sourcing</PackageTags>
 		<PackageProjectUrl>https://github.com/jsedlak/strata</PackageProjectUrl>
 		<RepositoryUrl>https://github.com/jsedlak/strata</RepositoryUrl>
-		<Version>1.0.0-beta</Version>
+		<Version>1.0.1</Version>
 	</PropertyGroup>
 
 	<ItemGroup>
