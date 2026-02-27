@@ -12,5 +12,5 @@ public class EventEnvelope<TEvent>
     public int Version { get; set; }
 
     [Id(2)]
-    public DateTime Timestamp { get; set; }
+    public DateTimeOffset Timestamp { get; set; }
 }

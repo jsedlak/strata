@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Strata.Journaling.Tests.JournalingTests.GrainModel;
 using Strata.Journaling.Tests.JournalingTests.Model;
 
@@ -8,11 +9,14 @@ internal sealed class AccountViewModelGrain : Grain, IAccountViewModelGrain
 {
     private readonly IPersistentState<AccountViewModel> _state;
 
+    private readonly ILogger<IAccountViewModelGrain> _logger;
+
     public AccountViewModelGrain(
-        [FromKeyedServices("state")] IPersistentState<AccountViewModel> state
-    )
+        [FromKeyedServices("state")] IPersistentState<AccountViewModel> state,
+        ILogger<IAccountViewModelGrain> logger)
     {
         _state = state;
+        _logger = logger;
     }
 
     public override async Task OnActivateAsync(CancellationToken cancellationToken)
@@ -31,7 +35,7 @@ internal sealed class AccountViewModelGrain : Grain, IAccountViewModelGrain
 
     public async Task UpdateBalance(double newBalance)
     {
-        Console.WriteLine("Receiving balance update for account {0} to {1}", this.GetPrimaryKeyString(), newBalance);
+        _logger.LogInformation("Receiving balance update for account {0} to {1}", this.GetPrimaryKeyString(), newBalance);
         _state.State.Balance = newBalance;
         await _state.WriteStateAsync();
     }

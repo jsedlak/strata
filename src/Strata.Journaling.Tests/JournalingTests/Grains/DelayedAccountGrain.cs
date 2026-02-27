@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging;
 using Strata.Journaling.Tests.JournalingTests.Events;
 using Strata.Journaling.Tests.JournalingTests.GrainModel;
 using Strata.Journaling.Tests.JournalingTests.Model;
@@ -6,14 +6,14 @@ using Strata.Journaling.Tests.JournalingTests.Projections;
 
 namespace Strata.Journaling.Tests.JournalingTests.Grains;
 
-[GrainType("account")]
-internal sealed class AccountGrain :
+[GrainType("delayed-account")]
+internal sealed class DelayedAccountGrain :
     JournaledGrain<AccountAggregate, BaseAccountEvent>,
-    IAccountGrain
+    IDelayedAccountGrain
 {
-    private readonly ILogger<IAccountGrain> _logger;
+    private readonly ILogger<IDelayedAccountGrain> _logger;
 
-    public AccountGrain(ILogger<IAccountGrain> logger)
+    public DelayedAccountGrain(ILogger<IDelayedAccountGrain> logger)
     {
         _logger = logger;
     }
@@ -21,38 +21,25 @@ internal sealed class AccountGrain :
     protected override void OnRegisterRecipients()
     {
         RegisterRecipient(
-            nameof(AccountProjection),
-            new AccountProjection(this.GrainFactory, _logger)
+            nameof(DelayedAccountProjection),
+            new DelayedAccountProjection(this.GrainFactory, _logger)
         );
-    }
-
-    public ValueTask Deactivate()
-    {
-        this.DeactivateOnIdle();
-        return ValueTask.CompletedTask;
-    }
-
-    public override async Task OnActivateAsync(CancellationToken cancellationToken)
-    {
-        await base.OnActivateAsync(cancellationToken);
-        _logger.LogInformation("[{0}] OnActivateAsync", this.GetPrimaryKeyString());
-    }
-
-    public override async Task OnDeactivateAsync(DeactivationReason reason, CancellationToken cancellationToken)
-    {
-        await base.OnDeactivateAsync(reason, cancellationToken);
-        _logger.LogInformation("[{0}] OnDeactivateAsync", this.GetPrimaryKeyString());
     }
 
     public Task<BaseAccountEvent[]> GetEvents() => Task.FromResult(Log.Select(e => e.Event).ToArray());
 
     public Task<double> GetBalance() => Task.FromResult(ConfirmedState.Balance);
 
+    public Task<bool> GetIsProcessingOutbox() => Task.FromResult(IsProcessingOutbox);
+
     public async Task Deposit(double amount)
     {
         if (amount <= 0) throw new ArgumentOutOfRangeException(nameof(amount), "Deposit amount must be positive.");
         var newBalance = ConfirmedState.Balance + amount;
         var @event = new BalanceAdjustedEvent(this.GetPrimaryKeyString()) { Balance = newBalance };
+
+        _logger.LogInformation("Depositing {0} to account {1}. New balance will be {2}", amount, this.GetPrimaryKeyString(), newBalance);
+
         await RaiseEvent(@event);
     }
 
@@ -62,6 +49,9 @@ internal sealed class AccountGrain :
         if (amount > ConfirmedState.Balance) throw new InvalidOperationException("Insufficient funds for withdrawal.");
         var newBalance = ConfirmedState.Balance - amount;
         var @event = new BalanceAdjustedEvent(this.GetPrimaryKeyString()) { Balance = newBalance };
+
+        _logger.LogInformation("Withdrawing {0} from account {1}. New balance will be {2}", amount, this.GetPrimaryKeyString(), newBalance);
+        
         await RaiseEvent(@event);
     }
 }
