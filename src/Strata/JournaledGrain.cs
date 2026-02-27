@@ -65,15 +65,22 @@ public abstract class JournaledGrain<TModel, TEvent> :
 
     private async Task OnDestroyState(CancellationToken cancellationToken)
     {
-        _shutdownCancellationSource.Cancel();
+        
+    }
 
-        if(_processOutboxTask is not null)
+    public override async Task OnDeactivateAsync(DeactivationReason reason, CancellationToken cancellationToken)
+    {
+        _shutdownCancellationSource.Cancel();
+        _logger.LogInformation("Shutdown initiated.");
+
+        if (_processOutboxTask is not null && !_processOutboxTask.IsCompleted)
         {
+            _logger.LogInformation("Waiting for outbox processing to complete.");
             await _processOutboxTask;
         }
 
         /* try to process the outbox */
-        if(_outbox is { Count: > 0 })
+        if (_outbox is { Count: > 0 })
         {
             _logger.LogInformation("Registering reminder for outbox processing.");
             await this.RegisterOrUpdateReminder(
@@ -82,6 +89,10 @@ public abstract class JournaledGrain<TModel, TEvent> :
                 TimeSpan.FromMinutes(1)
             );
         }
+
+        await base.OnDeactivateAsync(reason, cancellationToken);
+
+        
     }
 
     public async Task ReceiveReminder(string reminderName, TickStatus status)
@@ -113,7 +124,12 @@ public abstract class JournaledGrain<TModel, TEvent> :
     {
         if(_processOutboxTask is null || _processOutboxTask.IsCompleted)
         {
+            _logger.LogInformation("Starting outbox processing.");
             _processOutboxTask = ProcessOutbox();
+        }
+        else
+        {
+            _logger.LogInformation("Outbox processing already in progress.");
         }
     }
     
@@ -121,6 +137,7 @@ public abstract class JournaledGrain<TModel, TEvent> :
     {
         if(_shutdownCancellationSource.IsCancellationRequested)
         {
+            _logger.LogInformation("Shutdown in progress, skipping outbox processing.");
             return;
         }
 
