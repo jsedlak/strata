@@ -87,4 +87,36 @@ public class JournaledGrainTests(JournalingTestFixture fixture) : IClassFixture<
         Assert.Equal(100, balance1);
         Assert.Equal(200, balance2);
     }
+
+    [Fact]
+    public async Task JournaledGrain_DelayedProjection_OutboxClearsAfterStackedOperations()
+    {
+        var accountId = "delayed_projection_outbox_stacking";
+        var grain = Client.GetGrain<IDelayedAccountGrain>(accountId);
+        var projectionGrain = Client.GetGrain<IAccountViewModelGrain>(accountId);
+
+        await grain.Deposit(200);
+        await grain.Withdraw(25);
+        await grain.Deposit(40);
+        await grain.Withdraw(15);
+        await grain.Deposit(10);
+
+        var timeoutAt = DateTime.UtcNow.AddSeconds(15);
+        while (DateTime.UtcNow < timeoutAt)
+        {
+            if (!await grain.GetIsProcessingOutbox())
+            {
+                break;
+            }
+
+            await Task.Delay(50);
+        }
+
+        Assert.False(await grain.GetIsProcessingOutbox());
+        Assert.Equal(210, await grain.GetBalance());
+        Assert.Equal(210, await projectionGrain.GetBalance());
+
+        var log = await grain.GetEvents();
+        Assert.Equal(5, log.Length);
+    }
 }

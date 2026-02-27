@@ -206,6 +206,8 @@ public abstract class JournaledGrain<TModel, TEvent> :
 
     protected EventEnvelope<TEvent>[] Log => _journal.ToArray();
 
+    protected bool IsProcessingOutbox => _processOutboxTask is not null && !_processOutboxTask.IsCompleted;
+
     protected TModel ConfirmedState => _aggregate.State.Aggregate;
 
     protected int ConfirmedVersion => _aggregate.State.Version;
