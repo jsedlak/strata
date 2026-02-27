@@ -20,7 +20,8 @@ public abstract class JournaledGrain<TModel, TEvent> :
 
     private ILogger<IJournaledGrain> _logger = null!;
 
-    private List<Task> _backgroundTasks = new();
+    private Task? _processOutboxTask;
+    
     private readonly CancellationTokenSource _shutdownCancellationSource = new();
 
 
@@ -67,9 +68,9 @@ public abstract class JournaledGrain<TModel, TEvent> :
     {
         _shutdownCancellationSource.Cancel();
 
-        if(_backgroundTasks is {Count : > 0})
+        if(_processOutboxTask is not null)
         {
-            Task.WaitAll(_backgroundTasks.ToArray());
+            await _processOutboxTask;
         }
 
         /* try to process the outbox */
@@ -111,50 +112,29 @@ public abstract class JournaledGrain<TModel, TEvent> :
     #region Event Processing
     protected async Task TryProcessOutbox()
     {
-        Task? processingTask = ProcessOutbox();
-        if (processingTask is not null)
+        if(_processOutboxTask is null || _processOutboxTask.IsCompleted)
         {
-            await processingTask;
+            _processOutboxTask = ProcessOutbox();
         }
     }
     
-    protected Task ProcessOutbox() 
+    protected async Task ProcessOutbox() 
     {
         if(_shutdownCancellationSource.IsCancellationRequested)
         {
-            return Task.CompletedTask;
+            return;
         }
 
-        if(_outbox is { Count: > 0 })
-        {
-            _logger.LogInformation("Outbox has {0} items pending, starting processing.", _outbox.Count);
-            List<OutboxEnvelope<TEvent>> items = new();
-            while (_outbox.TryDequeue(out var item))
-            {
-                items.Add(item);
-            }
-
-            var itemsToProcess = items.ToArray();
-            var newProcessingTask = ProcessOutboxInBackground(itemsToProcess);
-
-             _backgroundTasks.Add(newProcessingTask);
-
-            return newProcessingTask;
-        }
-
-        return Task.CompletedTask;
-    }
-
-    private async Task ProcessOutboxInBackground(IEnumerable<OutboxEnvelope<TEvent>> items)
-    {
         // It's polite to yield immediately, since we're starting background work.
         await Task.CompletedTask.ConfigureAwait(ConfigureAwaitOptions.ForceYielding | ConfigureAwaitOptions.ContinueOnCapturedContext);
 
         // store the failed items in a list to requeue
         var failedItems = new List<OutboxEnvelope<TEvent>>();
 
-        foreach (var item in items)
+        while(_outbox.TryDequeue(out var item) && !_shutdownCancellationSource.IsCancellationRequested)
         {
+            _logger.LogInformation("[{0}] Outbox Count: {1}", this.GetPrimaryKeyString(), _outbox.Count);
+            
             try
             {
                 if (_outboxRecipients.TryGetValue(item.Destination, out var recipient))
