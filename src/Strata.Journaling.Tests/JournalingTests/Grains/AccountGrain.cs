@@ -1,4 +1,6 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Orleans.Journaling;
 using Strata.Journaling.Tests.JournalingTests.Events;
 using Strata.Journaling.Tests.JournalingTests.GrainModel;
 using Strata.Journaling.Tests.JournalingTests.Model;
@@ -12,6 +14,9 @@ internal sealed class AccountGrain :
     IAccountGrain
 {
     private readonly ILogger<IAccountGrain> _logger;
+
+
+
 
     public AccountGrain(ILogger<IAccountGrain> logger)
     {
@@ -32,17 +37,17 @@ internal sealed class AccountGrain :
         return ValueTask.CompletedTask;
     }
 
-    public override async Task OnActivateAsync(CancellationToken cancellationToken)
-    {
-        await base.OnActivateAsync(cancellationToken);
-        _logger.LogInformation("[{0}] OnActivateAsync", this.GetPrimaryKeyString());
-    }
+    //public override async Task OnActivateAsync(CancellationToken cancellationToken)
+    //{
+    //    await base.OnActivateAsync(cancellationToken);
+    //    _logger.LogInformation("[{0}] OnActivateAsync", this.GetPrimaryKeyString());
+    //}
 
-    public override async Task OnDeactivateAsync(DeactivationReason reason, CancellationToken cancellationToken)
-    {
-        await base.OnDeactivateAsync(reason, cancellationToken);
-        _logger.LogInformation("[{0}] OnDeactivateAsync", this.GetPrimaryKeyString());
-    }
+    //public override async Task OnDeactivateAsync(DeactivationReason reason, CancellationToken cancellationToken)
+    //{
+    //    await base.OnDeactivateAsync(reason, cancellationToken);
+    //    _logger.LogInformation("[{0}] OnDeactivateAsync", this.GetPrimaryKeyString());
+    //}
 
     public Task<BaseAccountEvent[]> GetEvents() => Task.FromResult(Log.Select(e => e.Event).ToArray());
 
@@ -54,6 +59,9 @@ internal sealed class AccountGrain :
         var newBalance = ConfirmedState.Balance + amount;
         var @event = new BalanceAdjustedEvent(this.GetPrimaryKeyString()) { Balance = newBalance };
         await RaiseEvent(@event);
+
+        var vmg = GrainFactory.GetGrain<IAccountViewModelGrain>(this.GetPrimaryKeyString());
+        await vmg.UpdateBalance(newBalance);
     }
 
     public async Task Withdraw(double amount)
@@ -63,5 +71,7 @@ internal sealed class AccountGrain :
         var newBalance = ConfirmedState.Balance - amount;
         var @event = new BalanceAdjustedEvent(this.GetPrimaryKeyString()) { Balance = newBalance };
         await RaiseEvent(@event);
+        var vmg = GrainFactory.GetGrain<IAccountViewModelGrain>(this.GetPrimaryKeyString());
+        await vmg.UpdateBalance(newBalance);
     }
 }
