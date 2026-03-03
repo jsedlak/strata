@@ -37,18 +37,6 @@ internal sealed class AccountGrain :
         return ValueTask.CompletedTask;
     }
 
-    //public override async Task OnActivateAsync(CancellationToken cancellationToken)
-    //{
-    //    await base.OnActivateAsync(cancellationToken);
-    //    _logger.LogInformation("[{0}] OnActivateAsync", this.GetPrimaryKeyString());
-    //}
-
-    //public override async Task OnDeactivateAsync(DeactivationReason reason, CancellationToken cancellationToken)
-    //{
-    //    await base.OnDeactivateAsync(reason, cancellationToken);
-    //    _logger.LogInformation("[{0}] OnDeactivateAsync", this.GetPrimaryKeyString());
-    //}
-
     public Task<BaseAccountEvent[]> GetEvents() => Task.FromResult(Log.Select(e => e.Event).ToArray());
 
     public Task<double> GetBalance() => Task.FromResult(ConfirmedState.Balance);

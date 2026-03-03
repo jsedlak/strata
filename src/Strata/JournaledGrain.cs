@@ -1,5 +1,4 @@
-﻿using Microsoft.CodeAnalysis.Operations;
-using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Orleans.Journaling;
 
@@ -50,7 +49,8 @@ public abstract class JournaledGrain<TModel, TEvent> :
     {
         _shutdownCancellationSource.Cancel();
 
-        if (_processOutboxTask is not null)
+        if (_processOutboxTask is not null && 
+            _processOutboxTask is not { IsCompleted: true })
         {
             await _processOutboxTask;
         }
