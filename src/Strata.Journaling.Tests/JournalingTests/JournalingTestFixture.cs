@@ -33,6 +33,7 @@ public class JournalingTestFixture : IAsyncLifetime
 
         builder.ConfigureSilo((options, siloBuilder) =>
         {
+            siloBuilder.AddMemoryGrainStorageAsDefault();
             siloBuilder.UseInMemoryReminderService();
             siloBuilder.ConfigureLogging(ConfigureConsoleLogging);
             siloBuilder.AddStateMachineStorage();

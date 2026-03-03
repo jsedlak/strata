@@ -12,24 +12,24 @@ internal sealed class AccountViewModelGrain : Grain, IAccountViewModelGrain
     private readonly ILogger<IAccountViewModelGrain> _logger;
 
     public AccountViewModelGrain(
-        [FromKeyedServices("state")] IPersistentState<AccountViewModel> state,
+        [PersistentState("state")] IPersistentState<AccountViewModel> state,
         ILogger<IAccountViewModelGrain> logger)
     {
         _state = state;
         _logger = logger;
     }
 
-    public override async Task OnActivateAsync(CancellationToken cancellationToken)
-    {
-        await base.OnActivateAsync(cancellationToken);
-
-        if(!_state.RecordExists)
-        {
-            _state.State = new();
-            await _state.WriteStateAsync();
-        }
-        
-    }
+    // public override async Task OnActivateAsync(CancellationToken cancellationToken)
+    // {
+    //     await base.OnActivateAsync(cancellationToken);
+// 
+    //     if(!_state.RecordExists)
+    //     {
+    //         _state.State = new();
+    //         //await _state.WriteStateAsync();
+    //     }
+    //     
+    // }
 
     public Task<double> GetBalance() => Task.FromResult(_state.State.Balance);
 

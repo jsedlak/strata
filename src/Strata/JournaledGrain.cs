@@ -5,7 +5,7 @@ using Orleans.Journaling;
 namespace Strata;
 
 public abstract class JournaledGrain<TModel, TEvent> :
-    DurableGrain, IJournaledGrain, ILifecycleParticipant<IGrainLifecycle>, IRemindable
+    DurableGrain, IJournaledGrain, IRemindable, ILifecycleParticipant<IGrainLifecycle>
     where TModel : new()
     where TEvent : notnull
 {
@@ -17,65 +17,41 @@ public abstract class JournaledGrain<TModel, TEvent> :
 
     private readonly Dictionary<string, IOutboxRecipient<TEvent>> _outboxRecipients = new();
 
-    private ILogger<IJournaledGrain> _logger = null!;
+    private ILogger _logger = null!;
 
     private Task? _processOutboxTask;
     
     private readonly CancellationTokenSource _shutdownCancellationSource = new();
 
+    public JournaledGrain() 
+    {
+        _aggregate = ServiceProvider.GetRequiredKeyedService<IPersistentState<AggregateEnvelope<TModel>>>("aggregate");
+        _journal = ServiceProvider.GetRequiredKeyedService<IDurableList<EventEnvelope<TEvent>>>("journal");
+        _outbox = ServiceProvider.GetRequiredKeyedService<IDurableQueue<OutboxEnvelope<TEvent>>>("outbox");
+        
+        var loggerFactory = ServiceProvider.GetRequiredService<ILoggerFactory>();
+        _logger = loggerFactory.CreateLogger<IJournaledGrain>();
+    }
 
     #region Lifecycle
     public void Participate(IGrainLifecycle lifecycle)
     {
-        lifecycle.Subscribe<JournaledGrain<TModel, TEvent>>(
-            GrainLifecycleStage.SetupState - 1,
-            OnHydrateState,
-            OnDestroyState
-        );
+        lifecycle.Subscribe<JournaledGrain<TModel, TEvent>>(GrainLifecycleStage.Activate - 100, Setup, Teardown);
     }
 
-    private async Task OnHydrateState(CancellationToken cancellationToken)
+    private async Task Setup(CancellationToken cancellationToken)
     {
-        var loggerFactory = ServiceProvider.GetRequiredService<ILoggerFactory>();
-        _logger = loggerFactory.CreateLogger<IJournaledGrain>();
-
-        _logger.LogInformation("OnHydrateState");
-
-        _aggregate = ServiceProvider.GetRequiredKeyedService<IPersistentState<AggregateEnvelope<TModel>>>("aggregate");
-        _journal = ServiceProvider.GetRequiredKeyedService<IDurableList<EventEnvelope<TEvent>>>("journal");
-        _outbox = ServiceProvider.GetRequiredKeyedService<IDurableQueue<OutboxEnvelope<TEvent>>>("outbox");
-
-        if (!_aggregate.RecordExists)
-        {
-            _aggregate.State = new()
-            {
-                Version = 1
-            };
-
-            await WriteStateAsync();
-        }
-
         OnRegisterRecipients();
+        await Task.CompletedTask;
     }
 
-    protected virtual void OnRegisterRecipients()
-    {
-        /* no op */
-    }
-
-    private async Task OnDestroyState(CancellationToken cancellationToken)
-    {
-        
-    }
-
-    public override async Task OnDeactivateAsync(DeactivationReason reason, CancellationToken cancellationToken)
+    private async Task Teardown(CancellationToken cancellationToken)
     {
         _shutdownCancellationSource.Cancel();
-        _logger.LogInformation("Shutdown initiated.");
 
-        if (_processOutboxTask is not null && !_processOutboxTask.IsCompleted)
+        if (_processOutboxTask is not null && 
+            _processOutboxTask is not { IsCompleted: true })
         {
-            _logger.LogInformation("Waiting for outbox processing to complete.");
             await _processOutboxTask;
         }
 
@@ -90,9 +66,7 @@ public abstract class JournaledGrain<TModel, TEvent> :
             );
         }
 
-        await base.OnDeactivateAsync(reason, cancellationToken);
-
-        
+        OnCleanupRecipients();
     }
 
     public async Task ReceiveReminder(string reminderName, TickStatus status)
@@ -113,6 +87,16 @@ public abstract class JournaledGrain<TModel, TEvent> :
     #endregion
 
     #region Recipient Management
+    protected virtual void OnRegisterRecipients()
+    {
+        /* no op */
+    }
+
+    protected virtual void OnCleanupRecipients()
+    {
+        /* no op */
+    }
+
     protected void RegisterRecipient(string key, IOutboxRecipient<TEvent> recipient)
     {
         _outboxRecipients.Add(key, recipient);
@@ -124,12 +108,7 @@ public abstract class JournaledGrain<TModel, TEvent> :
     {
         if(_processOutboxTask is null || _processOutboxTask.IsCompleted)
         {
-            _logger.LogInformation("Starting outbox processing.");
             _processOutboxTask = ProcessOutbox();
-        }
-        else
-        {
-            _logger.LogInformation("Outbox processing already in progress.");
         }
     }
     
@@ -137,7 +116,6 @@ public abstract class JournaledGrain<TModel, TEvent> :
     {
         if(_shutdownCancellationSource.IsCancellationRequested)
         {
-            _logger.LogInformation("Shutdown in progress, skipping outbox processing.");
             return;
         }
 
