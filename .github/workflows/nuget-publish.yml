@@ -2,9 +2,8 @@ name: Publish Packages
 
 on:
   workflow_dispatch: # Allow running the workflow manually from the GitHub UI
-  push:
-    branches:
-      - main
+  release:
+    types: [published]
 
 jobs:
   build:
@@ -18,12 +17,9 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Get next version
-        uses: reecetech/version-increment@2023.9.3
+      - name: Read version
         id: version
-        with:
-          scheme: semver
-          increment: patch
+        run: echo "version=$(tr -d '[:space:]' < .changes/.version)" >> "$GITHUB_OUTPUT"
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
