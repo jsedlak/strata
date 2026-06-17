@@ -1,4 +1,4 @@
-![Strata Logo](img/strata-logo.png)
+![Strata Logo](https://github.com/jsedlak/strata/raw/main/img/strata-logo.png)
 
 Strata is an opinionated Event Sourcing library built for Microsoft Orleans.
 
