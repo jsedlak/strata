@@ -10,9 +10,13 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
+    permissions:
+      contents: read
+      id-token: write # Required for NuGet Trusted Publishing (OIDC token issuance)
+
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: Get next version
         uses: reecetech/version-increment@2023.9.3
@@ -21,18 +25,10 @@ jobs:
           scheme: semver
           increment: patch
 
-      - name: Update versions
-        uses: jacobtomlinson/gha-find-replace@v3
-        with:
-          include: "*.csproj"
-          find: "1.0.0-beta"
-          replace: "${{ steps.version.outputs.version }}"
-          regex: false
-
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 9.0.x
+          dotnet-version: 10.0.x
 
       - name: Install dependencies
         run: dotnet restore
@@ -40,8 +36,24 @@ jobs:
       - name: Build
         run: dotnet build --configuration Release --no-restore
 
-      - name: Publish Strata
-        uses: brandedoutcast/publish-nuget@v2.5.2
+      - name: Pack Strata
+        run: >-
+          dotnet pack src/Strata/Strata.csproj
+          --configuration Release
+          -p:Version=${{ steps.version.outputs.version }}
+          --output ${{ runner.temp }}/packages
+
+      # Exchange the GitHub OIDC token for a short-lived nuget.org API key.
+      # Requires a Trusted Publishing policy on nuget.org for this repo + workflow.
+      - name: NuGet login (OIDC -> temp API key)
+        uses: NuGet/login@v1
+        id: login
         with:
-          PROJECT_FILE_PATH: src/Strata/Strata.csproj
-          NUGET_KEY: ${{secrets.NUGET_API_KEY}}
+          user: jsedlak # nuget.org username (profile name); swap for ${{ secrets.NUGET_USER }} if preferred
+
+      - name: Publish Strata
+        run: >-
+          dotnet nuget push ${{ runner.temp }}/packages/*.nupkg
+          --api-key ${{ steps.login.outputs.NUGET_API_KEY }}
+          --source https://api.nuget.org/v3/index.json
+          --skip-duplicate
