@@ -15,7 +15,7 @@
 		<PackageTags>orleans;cqrs;event sourcing</PackageTags>
 		<PackageProjectUrl>https://github.com/jsedlak/strata</PackageProjectUrl>
 		<RepositoryUrl>https://github.com/jsedlak/strata</RepositoryUrl>
-		<Version>1.1.0</Version>
+		<Version>1.2.0</Version>
 	</PropertyGroup>
 
 	<ItemGroup>

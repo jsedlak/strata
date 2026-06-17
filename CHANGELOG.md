@@ -10,3 +10,7 @@
 - Fixes in how outbox processing happens
 - Adds optional cleanup method for recipients
 - Internal unit testing fixes
+
+## 1.2.0
+
+- Updates Orleans to 10.2.0
